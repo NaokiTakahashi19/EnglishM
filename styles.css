@@ -802,10 +802,6 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   font-size: var(--text-xs);
 }
 
-.add-more {
-  cursor: pointer;
-}
-
 .empty-library {
   display: grid;
   justify-items: start;
