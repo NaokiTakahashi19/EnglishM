@@ -233,16 +233,9 @@ h3 {
 
 .player-pane {
   min-width: 0;
-  padding-block: var(--space-xl) calc(var(--size-touch) + var(--space-2xl));
+  padding-block: var(--space-md) calc(var(--size-touch) + var(--space-2xl));
 }
 
-.now-playing {
-  display: grid;
-  gap: var(--space-xs);
-  min-height: 7.5rem;
-}
-
-.now-playing__label,
 .field-label,
 .field-group > label {
   color: var(--color-muted);
@@ -252,28 +245,10 @@ h3 {
   text-transform: uppercase;
 }
 
-.now-playing h2 {
-  display: -webkit-box;
-  max-width: 24ch;
-  overflow: clip;
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 700;
-  line-height: 1.18;
-  letter-spacing: -0.025em;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-#track-detail {
-  color: var(--color-muted);
-  font-size: var(--text-sm);
-}
-
 .timeline {
   display: grid;
   gap: var(--space-xs);
-  margin-block-start: var(--space-lg);
+  margin-block-start: 0;
 }
 
 .seek {
@@ -571,10 +546,39 @@ h3 {
   background: var(--color-paper-2);
 }
 
+.sync-script {
+  position: fixed;
+  inset-inline: var(--page-gutter);
+  inset-block-end: calc(
+    max(var(--space-sm), env(safe-area-inset-bottom)) + 4rem + var(--space-lg) + var(--rule-strong) + var(--space-xs)
+  );
+  z-index: var(--z-sticky);
+  grid-template-rows: auto minmax(0, 1fr);
+  width: auto;
+  max-width: 30rem;
+  height: clamp(7rem, 20dvh, 9rem);
+  margin-inline: auto;
+  padding: 0;
+  overflow: clip;
+  gap: 0;
+  border-color: var(--color-rule-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-paper);
+}
+
+body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-pane {
+  padding-block-end: calc(var(--size-touch) + var(--space-2xl) + 9rem);
+}
+
 .sync-script__heading,
 .translation-panel__heading {
   display: grid;
   gap: var(--space-xs);
+}
+
+.sync-script__heading {
+  padding: var(--space-xs) var(--space-sm);
+  border-block-end: var(--rule-thin) solid var(--color-rule);
 }
 
 .sync-script h4,
@@ -584,6 +588,10 @@ h3 {
   font-weight: 700;
 }
 
+.sync-script h4 {
+  font-size: var(--text-sm);
+}
+
 .sync-script__heading p,
 .sync-script__note,
 .translation-status {
@@ -591,17 +599,23 @@ h3 {
   font-size: var(--text-sm);
 }
 
+.sync-script__heading p,
+.sync-script__note {
+  display: none;
+}
+
 .sync-transcript {
   display: flex;
   flex-wrap: wrap;
   align-content: start;
   gap: var(--space-2xs) 0.32em;
-  height: clamp(8rem, 24dvh, 12rem);
-  padding: var(--space-md);
+  min-height: 0;
+  height: 100%;
+  padding: var(--space-sm);
   overflow: auto;
   overscroll-behavior: contain;
   scroll-behavior: smooth;
-  border-block: var(--rule-thin) solid var(--color-rule);
+  border: 0;
   background: var(--color-paper);
 }
 
@@ -889,6 +903,17 @@ h3 {
   color: var(--color-ink);
 }
 
+.track-row[data-current="true"] .track-select__name::before {
+  content: "";
+  display: inline-block;
+  width: var(--space-xs);
+  height: var(--space-xs);
+  margin-inline-end: var(--space-xs);
+  border-radius: var(--radius-round);
+  background: var(--color-accent);
+  vertical-align: 0.08em;
+}
+
 .track-select {
   min-width: 0;
   min-height: 4.5rem;
@@ -1165,6 +1190,10 @@ h3 {
     padding-block: var(--space-2xl);
   }
 
+  body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-pane {
+    padding-block-end: var(--space-2xl);
+  }
+
   .transport {
     position: static;
     inset: auto;
@@ -1176,6 +1205,43 @@ h3 {
     border: 0;
     border-radius: 0;
     background: transparent;
+  }
+
+  .sync-script {
+    position: static;
+    inset: auto;
+    z-index: auto;
+    grid-template-rows: none;
+    width: auto;
+    max-width: none;
+    height: auto;
+    margin-inline: 0;
+    padding: var(--space-md);
+    overflow: visible;
+    gap: var(--space-md);
+    border-color: var(--color-rule);
+    border-radius: var(--radius-sm);
+    background: var(--color-paper-2);
+  }
+
+  .sync-script__heading {
+    padding: 0;
+    border-block-end: 0;
+  }
+
+  .sync-script h4 {
+    font-size: var(--text-md);
+  }
+
+  .sync-script__heading p,
+  .sync-script__note {
+    display: block;
+  }
+
+  .sync-transcript {
+    height: clamp(8rem, 24dvh, 12rem);
+    padding: var(--space-md);
+    border-block: var(--rule-thin) solid var(--color-rule);
   }
 
   .library-pane {

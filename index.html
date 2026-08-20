@@ -46,19 +46,13 @@
             </svg>
             音声を選ぶ
           </label>
-          <p class="file-action__note">音声はアップロードされません。選択後はオフラインでも再生できます。</p>
+          <p class="file-action__note">再生時は端末内だけで処理します。英文生成を選んだときだけ、音声をOpenAI APIへ送信します。</p>
         </div>
       </section>
 
       <section class="workbench reveal" style="--i: 1" aria-label="音声プレイヤー">
         <div class="player-pane">
           <audio id="audio" preload="metadata"></audio>
-
-          <div class="now-playing" aria-live="polite">
-            <p class="now-playing__label">再生中</p>
-            <h2 id="track-title">音声を選んでください</h2>
-            <p id="track-detail">MP3、M4A、WAVなどを複数選べます</p>
-          </div>
 
           <div class="timeline">
             <label class="visually-hidden" for="seek">再生位置</label>
@@ -223,7 +217,7 @@
             <div class="transcript-panel__heading">
               <div>
                 <h3 id="transcript-title">英語スクリプト</h3>
-                <p>英文と単語時刻は端末内で生成します。日本語訳はOpenAI APIで生成し、このブラウザへ保存します。</p>
+                <p>英文・単語時刻・日本語訳をOpenAI APIで生成し、このブラウザへ保存します。</p>
               </div>
               <div class="transcript-panel__actions">
                 <button class="control control--text" id="translation-settings-button" type="button">API設定</button>
@@ -264,7 +258,7 @@
                 <button class="control control--text" id="delete-transcript-button" type="button" disabled>保存内容を削除</button>
               </div>
               <p class="transcript-status" id="transcript-status" aria-live="polite">
-                初回生成時は約100MBの英語認識モデルを取得します。Wi-Fiでの利用をおすすめします。
+                API設定の共通アクセスキーを、英文生成と日本語訳の両方に使用します。
               </p>
             </div>
 
@@ -294,10 +288,10 @@
 
           <dialog class="word-dialog translation-settings-dialog" id="translation-settings-dialog" aria-labelledby="translation-settings-title">
             <form class="word-dialog__inner" id="translation-settings-form">
-              <p class="word-dialog__label">OpenAI翻訳の設定</p>
-              <h3 id="translation-settings-title">翻訳アクセスキー</h3>
+              <p class="word-dialog__label">OpenAI API設定</p>
+              <h3 id="translation-settings-title">共通アクセスキー</h3>
               <p class="translation-settings-dialog__note">
-                OpenAI APIキーではなく、管理者が翻訳サーバーに設定した専用アクセスキーを入力します。値はこのブラウザだけに保存されます。
+                OpenAI APIキーではなく、管理者がサーバーに設定した専用アクセスキーです。英文生成と日本語訳の両方に使い、このブラウザだけに保存します。
               </p>
               <label class="field-group" for="translation-access-key">
                 <span>アクセスキー</span>
@@ -344,7 +338,7 @@
 
     <footer class="foot-dense">
       <p>
-        音声認識は端末内で行い、音声ファイルは送信しません。日本語訳を生成するときだけ英文または選択した単語をOpenAI APIへ送信します。設定・前回位置・英文・単語時刻・日本語訳は、このブラウザに記録します。
+        再生中の音声は端末内だけで処理します。英文生成時は音声を、日本語訳の生成時は英文または選択した単語をOpenAI APIへ送信します。設定・前回位置・英文・単語時刻・日本語訳は、このブラウザに記録します。
         <span id="connection-status">接続状態を確認中</span>
       </p>
     </footer>

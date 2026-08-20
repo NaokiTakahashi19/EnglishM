@@ -2,8 +2,6 @@ const audio = document.querySelector("#audio");
 const fileInput = document.querySelector("#file-input");
 const fileAction = document.querySelector("#file-action");
 const filePickerLabel = document.querySelector("#file-picker-label");
-const trackTitle = document.querySelector("#track-title");
-const trackDetail = document.querySelector("#track-detail");
 const seek = document.querySelector("#seek");
 const currentTimeLabel = document.querySelector("#current-time");
 const durationLabel = document.querySelector("#duration");
@@ -71,7 +69,12 @@ const TRANSLATION_ACCESS_KEY = "listening-desk:translation-access-key";
 const TRANSLATION_API_URL = window.location.hostname.endsWith(".vercel.app")
   ? new URL("/api/translate", window.location.origin).href
   : "https://english-m.vercel.app/api/translate";
+const TRANSCRIPTION_API_URL = window.location.hostname.endsWith(".vercel.app")
+  ? new URL("/api/transcribe", window.location.origin).href
+  : "https://english-m.vercel.app/api/transcribe";
 const AUDIO_EXTENSIONS = /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i;
+const TRANSCRIPTION_EXTENSIONS = /\.(mp3|mp4|mpeg|mpga|m4a|wav|webm)$/i;
+const MAX_TRANSCRIPTION_FILE_BYTES = 4 * 1024 * 1024;
 
 let tracks = [];
 let currentIndex = -1;
@@ -86,7 +89,6 @@ let practicePauseUntil = 0;
 let isPracticePause = false;
 let pendingPracticeTargetIndex = -1;
 let completedPlaysForCurrentTrack = 0;
-let languageWorker = null;
 let transcribingTrackId = null;
 let translatingTrackId = null;
 const translatingWordKeys = new Set();
@@ -244,11 +246,6 @@ function formatTime(seconds) {
     : `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
-function formatBytes(bytes) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function showStatus(message, tone = "info") {
   window.clearTimeout(statusTimer);
   statusMessage.textContent = message;
@@ -343,8 +340,6 @@ function selectTrack(index, autoplay = false) {
   audio.src = track.url;
   audio.playbackRate = Number(rateSelect.value);
   audio.load();
-  trackTitle.textContent = track.file.name.replace(/\.[^.]+$/, "");
-  trackDetail.textContent = `${track.file.name.split(".").pop()?.toUpperCase() || "AUDIO"} · ${formatBytes(track.file.size)}`;
   updateMediaSession(track);
   renderLibrary();
   syncLoopUi();
@@ -384,8 +379,6 @@ function removeTrack(index) {
 
 function resetPlayer() {
   cancelPracticePause(false);
-  trackTitle.textContent = "音声を選んでください";
-  trackDetail.textContent = "MP3、M4A、WAVなどを複数選べます";
   seek.value = "0";
   seek.max = "0";
   seek.style.setProperty("--progress", "0%");
@@ -437,6 +430,22 @@ function renderLibrary() {
 
     item.append(selectButton, removeButton);
     trackList.append(item);
+  });
+
+  const currentRow = trackList.querySelector('.track-row[data-current="true"]');
+  if (currentRow) window.requestAnimationFrame(() => keepCurrentTrackVisible(currentRow));
+}
+
+function keepCurrentTrackVisible(currentRow) {
+  if (!currentRow || trackList.clientHeight === 0) return;
+  const listRect = trackList.getBoundingClientRect();
+  const rowRect = currentRow.getBoundingClientRect();
+  const inset = 4;
+  if (rowRect.top >= listRect.top + inset && rowRect.bottom <= listRect.bottom - inset) return;
+  const offset = rowRect.top - listRect.top - (trackList.clientHeight - rowRect.height) / 2;
+  trackList.scrollBy({
+    top: offset,
+    behavior: "auto",
   });
 }
 
@@ -590,7 +599,7 @@ function renderTranslation(text) {
     translationStatus.textContent = "日本語訳もこのブラウザに保存されています。";
     delete translationStatus.dataset.state;
   } else if (activeTranscriptRecord?.text && !getTranslationAccessKey()) {
-    translationStatus.textContent = "OpenAI翻訳を使うには、最初にAPI設定から翻訳アクセスキーを保存してください。";
+    translationStatus.textContent = "OpenAI APIを使うには、最初にAPI設定から共通アクセスキーを保存してください。";
     delete translationStatus.dataset.state;
   } else {
     translationStatus.textContent = activeTranscriptRecord?.text
@@ -665,7 +674,7 @@ function handleSynchronizedWord(word) {
   openWordDialog();
   if (cachedTranslation || !selectedWord.trackId) return;
   if (!getTranslationAccessKey()) {
-    wordDialogTranslation.textContent = "先にOpenAI翻訳のAPI設定が必要です。";
+    wordDialogTranslation.textContent = "先にOpenAI APIの共通アクセスキー設定が必要です。";
     return;
   }
   requestOpenAITranslation({
@@ -780,7 +789,7 @@ async function loadTranscript(track) {
       activeTranscriptRecord = null;
       delete transcriptOutput.dataset.state;
       delete transcriptStatus.dataset.state;
-      transcriptStatus.textContent = "まだスクリプトはありません。初回生成時は約100MBの認識モデルを取得します。";
+      transcriptStatus.textContent = "まだスクリプトはありません。API設定の共通アクセスキーで生成できます。";
       renderSynchronizedTranscript([]);
       renderTranslation("");
     }
@@ -792,45 +801,26 @@ async function loadTranscript(track) {
   }
 }
 
-function getLanguageWorker() {
-  if (languageWorker) return languageWorker;
-  languageWorker = new Worker("./transcription-worker.js?v=15", { type: "module" });
-  languageWorker.addEventListener("message", handleLanguageWorkerMessage);
-  languageWorker.addEventListener("error", () => {
-    if (transcribingTrackId) {
-      finishTranscriptionWithError("文字起こし処理を開始できませんでした。通信状態を確認してください。");
-    }
-  });
-  return languageWorker;
-}
-
-async function decodeForTranscription(file) {
-  const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
-  const OfflineAudioContextConstructor = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-  if (!AudioContextConstructor || !OfflineAudioContextConstructor) {
-    throw new Error("Web Audio is not supported");
-  }
-
-  const context = new AudioContextConstructor();
-  try {
-    const sourceBuffer = await context.decodeAudioData(await file.arrayBuffer());
-    const sampleRate = 16000;
-    const frameCount = Math.ceil(sourceBuffer.duration * sampleRate);
-    const offlineContext = new OfflineAudioContextConstructor(1, frameCount, sampleRate);
-    const source = offlineContext.createBufferSource();
-    source.buffer = sourceBuffer;
-    source.connect(offlineContext.destination);
-    source.start(0);
-    const rendered = await offlineContext.startRendering();
-    return rendered.getChannelData(0).slice();
-  } finally {
-    await context.close();
-  }
-}
-
 async function startTranscription() {
   const track = currentTrack();
   if (!track || transcribingTrackId) return;
+
+  const accessKey = getTranslationAccessKey();
+  if (!accessKey) {
+    transcriptOutput.dataset.state = "error";
+    transcriptStatus.dataset.state = "error";
+    transcriptStatus.textContent = "英文生成にはAPI設定の共通アクセスキーが必要です。";
+    openTranslationSettings();
+    return;
+  }
+  if (!TRANSCRIPTION_EXTENSIONS.test(track.file.name)) {
+    finishTranscriptionWithError("英文生成はMP3、M4A、WAV、WEBMなどの音声に対応しています。");
+    return;
+  }
+  if (track.file.size > MAX_TRANSCRIPTION_FILE_BYTES) {
+    finishTranscriptionWithError("英文生成できる音声は4MBまでです。短く分けてから試してください。");
+    return;
+  }
 
   transcribingTrackId = track.id;
   transcribeButton.disabled = true;
@@ -838,98 +828,74 @@ async function startTranscription() {
   transcribeButton.setAttribute("aria-busy", "true");
   transcriptOutput.dataset.state = "loading";
   transcriptStatus.dataset.state = "loading";
-  transcriptStatus.textContent = "音声を認識用データへ変換しています。";
+  transcriptStatus.textContent = "OpenAI APIで英文と単語時刻を生成しています。";
 
   try {
-    const audioData = await decodeForTranscription(track.file);
-    if (audioData.length > 16000 * 60 * 30) {
-      throw new Error("Audio is longer than 30 minutes");
+    const response = await fetch(TRANSCRIPTION_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "X-Translation-Key": accessKey,
+        "X-Audio-Filename": encodeURIComponent(track.file.name),
+        "X-Audio-Type": track.file.type || "application/octet-stream",
+      },
+      body: track.file,
+    });
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch {
+      payload = {};
     }
-    transcriptStatus.textContent = "英語認識モデルを準備しています。初回は時間がかかります。";
-    getLanguageWorker().postMessage(
-      { type: "transcribe", id: track.id, audio: audioData.buffer },
-      [audioData.buffer],
-    );
-  } catch (error) {
-    console.error("Audio preparation failed:", error);
-    const message = error?.message === "Audio is longer than 30 minutes"
-      ? "30分を超える音声は、短く分けてから生成してください。"
-      : "音声を文字起こし用に変換できませんでした。別の音声形式を試してください。";
-    finishTranscriptionWithError(message);
-  }
-}
+    if (!response.ok) {
+      const error = new Error(payload.error || "Transcription request failed");
+      error.status = response.status;
+      throw error;
+    }
+    const text = String(payload.text || "").trim();
+    if (!text) {
+      finishTranscriptionWithError("英語を検出できませんでした。音量を確認してもう一度試してください。");
+      return;
+    }
 
-async function handleLanguageWorkerMessage(event) {
-  const message = event.data;
-  if (message.type === "progress") {
-    const rawProgress = Number(message.progress);
-    const percent = Number.isFinite(rawProgress)
-      ? Math.round(rawProgress <= 1 ? rawProgress * 100 : rawProgress)
-      : null;
-    transcriptStatus.dataset.state = "loading";
-    transcriptStatus.textContent = percent === null
-      ? "英語認識モデルを読み込んでいます。"
-      : `英語認識モデルを読み込んでいます — ${percent}%`;
-    return;
-  }
-
-  if (message.type === "device") {
-    transcriptStatus.dataset.state = "loading";
-    transcriptStatus.textContent = message.device === "webgpu"
-      ? "端末のGPUで英文を生成しています。"
-      : "互換モードで英文を生成しています。しばらくお待ちください。";
-    return;
-  }
-
-  if (message.type === "error") {
-    console.error("Transcription worker error:", message.message);
-    finishTranscriptionWithError("英文を生成できませんでした。通信状態と端末の空き容量を確認してください。");
-    return;
-  }
-
-  if (message.type !== "result") return;
-  const text = String(message.text || "").trim();
-  if (!text) {
-    finishTranscriptionWithError("英語を検出できませんでした。音量を確認してもう一度試してください。");
-    return;
-  }
-
-  const track = tracks.find((candidate) => candidate.id === message.id);
-  const record = {
-    id: message.id,
-    text,
-    words: normalizeTimedWords(message.words),
-    translation: "",
-    wordTranslations: {},
-    source: "whisper-tiny.en_timestamped",
-    updatedAt: new Date().toISOString(),
-  };
-  try {
+    const record = {
+      id: track.id,
+      text,
+      words: normalizeTimedWords(payload.words),
+      translation: "",
+      wordTranslations: {},
+      source: payload.source || "openai-whisper-1",
+      updatedAt: new Date().toISOString(),
+    };
     await putStoredTranscript(record);
-    if (currentTrack()?.id === message.id) {
+    if (currentTrack()?.id === track.id) {
       activeTranscriptRecord = record;
       transcriptOutput.value = text;
       transcriptOutput.dataset.state = "success";
       saveTranscriptButton.disabled = false;
       deleteTranscriptButton.disabled = false;
       transcriptStatus.dataset.state = "success";
-      transcriptStatus.textContent = "英文を生成し、このブラウザに保存しました。必要なら修正できます。";
+      transcriptStatus.textContent = "英文を生成し、このブラウザに保存しました。日本語訳も続けて生成します。";
       renderSynchronizedTranscript(record.words);
       renderTranslation("");
-    } else if (track) {
+    } else {
       showStatus(`${track.file.name}の英語スクリプトを保存しました。`);
     }
-    if (getTranslationAccessKey()) startTranslation(record);
-  } catch {
-    if (currentTrack()?.id === message.id) {
-      transcriptOutput.value = text;
-      transcriptOutput.dataset.state = "error";
-      transcriptStatus.dataset.state = "error";
-      transcriptStatus.textContent = "英文は生成できましたが、保存できませんでした。ブラウザの空き容量を確認してください。";
-    }
+    startTranslation(record);
+  } catch (error) {
+    console.error("OpenAI transcription failed:", error);
+    finishTranscriptionWithError(transcriptionErrorMessage(error));
   } finally {
-    finishTranscription();
+    if (transcribingTrackId === track.id) finishTranscription();
   }
+}
+
+function transcriptionErrorMessage(error) {
+  if (error?.status === 401) return "共通アクセスキーが正しくありません。API設定を確認してください。";
+  if (error?.status === 413) return "音声ファイルが大きすぎます。短く分けてから試してください。";
+  if (error?.status === 429) return "英文生成の利用回数が上限に達しました。少し待ってから試してください。";
+  if (error?.status === 503) return "サーバーのOpenAI API設定が完了していません。";
+  return "OpenAI APIで英文を生成できませんでした。通信状態を確認してください。";
 }
 
 function startTranslation(record, force = false) {
@@ -942,7 +908,7 @@ function startTranslation(record, force = false) {
     if (currentTrack()?.id === record.id) {
       translationPanel.hidden = false;
       translationStatus.dataset.state = "error";
-      translationStatus.textContent = "OpenAI翻訳を使うには、API設定から翻訳アクセスキーを保存してください。";
+      translationStatus.textContent = "OpenAI APIを使うには、API設定から共通アクセスキーを保存してください。";
     }
     if (force) openTranslationSettings();
     return;
@@ -1037,9 +1003,9 @@ async function requestOpenAITranslation({ purpose, id, key = "", text }) {
 }
 
 function translationErrorMessage(error) {
-  if (error?.status === 401) return "翻訳アクセスキーが正しくありません。API設定を確認してください。";
+  if (error?.status === 401) return "共通アクセスキーが正しくありません。API設定を確認してください。";
   if (error?.status === 429) return "翻訳の利用回数が上限に達しました。少し待ってから試してください。";
-  if (error?.status === 503) return "翻訳サーバーのOpenAI API設定が完了していません。";
+  if (error?.status === 503) return "サーバーのOpenAI API設定が完了していません。";
   return "OpenAI APIで日本語訳を生成できませんでした。通信状態を確認してください。";
 }
 
@@ -1350,7 +1316,7 @@ translationSettingsForm.addEventListener("submit", (event) => {
   try {
     localStorage.setItem(TRANSLATION_ACCESS_KEY, accessKey);
   } catch {
-    showStatus("翻訳アクセスキーをこのブラウザに保存できませんでした。", "error");
+    showStatus("共通アクセスキーをこのブラウザに保存できませんでした。", "error");
     return;
   }
   translationSettingsDialog.close();
