@@ -153,28 +153,7 @@ h3 {
 
 .intro {
   display: grid;
-  gap: var(--space-xl);
-  padding-block: var(--space-xl) var(--space-2xl);
-}
-
-.intro__copy {
-  display: grid;
-  gap: var(--space-md);
-}
-
-.intro h1 {
-  max-width: 9ch;
-  font-family: var(--font-display);
-  font-size: var(--text-display);
-  font-weight: 300;
-  line-height: 1.06;
-  letter-spacing: -0.035em;
-}
-
-.intro__copy p {
-  max-width: 42rem;
-  color: var(--color-ink-2);
-  line-height: 1.75;
+  padding-block: var(--space-md) var(--space-lg);
 }
 
 .file-action {
@@ -1119,9 +1098,7 @@ h3 {
 
 @media (min-width: 40rem) {
   .intro {
-    grid-template-columns: minmax(0, 1.5fr) minmax(16rem, 0.75fr);
-    align-items: end;
-    padding-block: var(--space-2xl) var(--space-3xl);
+    padding-block: var(--space-lg);
   }
 
   .study-tools {
