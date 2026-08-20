@@ -1,2 +1,6 @@
 .DS_Store
 .hallmark/
+.env
+.env.*
+!.env.example
+.vercel/

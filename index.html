@@ -123,10 +123,17 @@
             </div>
 
             <div class="field-group">
-              <span class="field-label">再生方法</span>
-              <button class="control control--quiet" id="repeat-button" type="button" aria-pressed="false" disabled>
-                1曲リピート：切
-              </button>
+              <label for="playback-mode">再生方法</label>
+              <select id="playback-mode" class="field-control">
+                <option value="sequence">順番に次の音声へ</option>
+                <option value="count">回数を決めて次へ</option>
+                <option value="infinite">同じ音声を無限リピート</option>
+              </select>
+            </div>
+
+            <div class="field-group repeat-count-group" id="repeat-count-group" hidden>
+              <label for="repeat-count">各音声の再生回数</label>
+              <input id="repeat-count" class="field-control" type="number" min="2" max="99" step="1" value="3" inputmode="numeric" />
             </div>
           </div>
 
@@ -141,7 +148,7 @@
                 手動で次へ
               </button>
               <button class="control control--quiet practice-mode" id="auto-next-mode-button" type="button" aria-pressed="false">
-                待って次へ
+                待って自動再生
               </button>
             </div>
 
@@ -187,7 +194,7 @@
             <div class="transcript-panel__heading">
               <div>
                 <h3 id="transcript-title">英語スクリプト</h3>
-                <p>音声は端末内で文字起こしし、結果をこのブラウザに保存します。</p>
+                <p>英文と単語時刻は端末内で生成します。日本語訳はOpenAI APIで生成し、このブラウザへ保存します。</p>
               </div>
               <button class="control control--quiet" id="transcribe-button" type="button" disabled>音声から生成</button>
             </div>
@@ -201,6 +208,27 @@
               disabled
             ></textarea>
 
+            <section class="sync-script" id="sync-script" aria-labelledby="sync-script-title" hidden>
+              <div class="sync-script__heading">
+                <h4 id="sync-script-title">音声同期スクリプト</h4>
+                <p>再生中は現在の単語を強調します。再生中に単語を選ぶとその位置へ移動し、停止中なら単語訳を表示します。</p>
+              </div>
+              <div class="sync-transcript" id="sync-transcript" aria-label="単語を選択できる英語スクリプト"></div>
+              <p class="sync-script__note">単語位置は音声認識による推定値のため、無音部分では多少ずれることがあります。</p>
+            </section>
+
+            <section class="translation-panel" id="translation-panel" aria-labelledby="translation-title" hidden>
+              <div class="translation-panel__heading">
+                <h4 id="translation-title">日本語訳</h4>
+                <div class="translation-panel__actions">
+                  <button class="control control--text" id="translation-settings-button" type="button">API設定</button>
+                  <button class="control control--text" id="translate-button" type="button">日本語訳を生成</button>
+                </div>
+              </div>
+              <p class="translation-output" id="translation-output"></p>
+              <p class="translation-status" id="translation-status" aria-live="polite"></p>
+            </section>
+
             <div class="transcript-actions">
               <button class="control control--quiet" id="save-transcript-button" type="button" disabled>修正を保存</button>
               <button class="control control--text" id="delete-transcript-button" type="button" disabled>保存内容を削除</button>
@@ -209,6 +237,36 @@
               初回生成時は約100MBの英語認識モデルを取得します。Wi-Fiでの利用をおすすめします。
             </p>
           </section>
+
+          <dialog class="word-dialog" id="word-dialog" aria-labelledby="word-dialog-title">
+            <form method="dialog" class="word-dialog__inner">
+              <p class="word-dialog__label">単語の日本語訳</p>
+              <h3 id="word-dialog-title">—</h3>
+              <p class="word-dialog__translation" id="word-dialog-translation" aria-live="polite">翻訳を準備しています。</p>
+              <div class="word-dialog__actions">
+                <button class="control control--quiet" id="play-word-button" type="button">この位置から再生</button>
+                <button class="control control--text" value="close">閉じる</button>
+              </div>
+            </form>
+          </dialog>
+
+          <dialog class="word-dialog translation-settings-dialog" id="translation-settings-dialog" aria-labelledby="translation-settings-title">
+            <form class="word-dialog__inner" id="translation-settings-form">
+              <p class="word-dialog__label">OpenAI翻訳の設定</p>
+              <h3 id="translation-settings-title">翻訳アクセスキー</h3>
+              <p class="translation-settings-dialog__note">
+                OpenAI APIキーではなく、管理者が翻訳サーバーに設定した専用アクセスキーを入力します。値はこのブラウザだけに保存されます。
+              </p>
+              <label class="field-group" for="translation-access-key">
+                <span>アクセスキー</span>
+                <input class="field-control" id="translation-access-key" type="password" autocomplete="off" required />
+              </label>
+              <div class="word-dialog__actions">
+                <button class="control control--primary" type="submit">保存</button>
+                <button class="control control--text" id="translation-settings-close" type="button">閉じる</button>
+              </div>
+            </form>
+          </dialog>
         </div>
 
         <aside class="library-pane" aria-labelledby="library-title">
@@ -244,7 +302,7 @@
 
     <footer class="foot-dense">
       <p>
-        Listening Deskは音声をサーバーへ送信しません。設定・前回位置・生成または修正した英文だけを、このブラウザに記録します。
+        音声認識は端末内で行い、音声ファイルは送信しません。日本語訳を生成するときだけ英文または選択した単語をOpenAI APIへ送信します。設定・前回位置・英文・単語時刻・日本語訳は、このブラウザに記録します。
         <span id="connection-status">接続状態を確認中</span>
       </p>
     </footer>

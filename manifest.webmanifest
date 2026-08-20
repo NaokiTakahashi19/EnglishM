@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Listening Desk — 英語音声プレイヤー",
   "short_name": "Listening Desk",
-  "description": "端末内の英語学習用音声を、速度変更やA–Bリピートで聞けるプレイヤー。",
+  "description": "端末内の英語音声を、リピーティング・同期英文・日本語訳と一緒に学べるプレイヤー。",
   "lang": "ja",
   "start_url": "./",
   "scope": "./",

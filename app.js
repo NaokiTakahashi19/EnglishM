@@ -13,7 +13,9 @@ const nextButton = document.querySelector("#next-button");
 const backButton = document.querySelector("#back-button");
 const forwardButton = document.querySelector("#forward-button");
 const rateSelect = document.querySelector("#playback-rate");
-const repeatButton = document.querySelector("#repeat-button");
+const playbackModeSelect = document.querySelector("#playback-mode");
+const repeatCountGroup = document.querySelector("#repeat-count-group");
+const repeatCountInput = document.querySelector("#repeat-count");
 const manualNextModeButton = document.querySelector("#manual-next-mode-button");
 const autoNextModeButton = document.querySelector("#auto-next-mode-button");
 const pauseRatioSelect = document.querySelector("#pause-ratio");
@@ -23,6 +25,21 @@ const transcriptOutput = document.querySelector("#transcript-output");
 const saveTranscriptButton = document.querySelector("#save-transcript-button");
 const deleteTranscriptButton = document.querySelector("#delete-transcript-button");
 const transcriptStatus = document.querySelector("#transcript-status");
+const syncScript = document.querySelector("#sync-script");
+const syncTranscript = document.querySelector("#sync-transcript");
+const translationPanel = document.querySelector("#translation-panel");
+const translationOutput = document.querySelector("#translation-output");
+const translationStatus = document.querySelector("#translation-status");
+const translateButton = document.querySelector("#translate-button");
+const translationSettingsButton = document.querySelector("#translation-settings-button");
+const translationSettingsDialog = document.querySelector("#translation-settings-dialog");
+const translationSettingsForm = document.querySelector("#translation-settings-form");
+const translationSettingsClose = document.querySelector("#translation-settings-close");
+const translationAccessKeyInput = document.querySelector("#translation-access-key");
+const wordDialog = document.querySelector("#word-dialog");
+const wordDialogTitle = document.querySelector("#word-dialog-title");
+const wordDialogTranslation = document.querySelector("#word-dialog-translation");
+const playWordButton = document.querySelector("#play-word-button");
 const setAButton = document.querySelector("#set-a-button");
 const setBButton = document.querySelector("#set-b-button");
 const clearLoopButton = document.querySelector("#clear-loop-button");
@@ -41,6 +58,8 @@ const POSITIONS_KEY = "listening-desk:positions";
 const LOOPS_KEY = "listening-desk:loops";
 const TRANSCRIPT_DB_NAME = "listening-desk";
 const TRANSCRIPT_STORE_NAME = "transcripts";
+const TRANSLATION_ACCESS_KEY = "listening-desk:translation-access-key";
+const TRANSLATION_API_URL = new URL("./api/translate", window.location.href).href;
 const AUDIO_EXTENSIONS = /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i;
 
 let tracks = [];
@@ -54,22 +73,38 @@ let practicePauseTimer = null;
 let practiceCountdownTimer = null;
 let practicePauseUntil = 0;
 let isPracticePause = false;
-let pendingPracticeNextIndex = -1;
-let transcriptionWorker = null;
+let pendingPracticeTargetIndex = -1;
+let completedPlaysForCurrentTrack = 0;
+let languageWorker = null;
 let transcribingTrackId = null;
+let translatingTrackId = null;
+const translatingWordKeys = new Set();
 let transcriptSaveTimer = null;
+let activeTranscriptRecord = null;
+let syncWordButtons = [];
+let activeSyncWordIndex = -1;
+let selectedWord = null;
 
+const storedSettings = readStored(SETTINGS_KEY, {});
 const settings = {
   rate: 1,
-  repeatOne: false,
+  playbackMode: "sequence",
+  repeatCount: 3,
   practiceMode: "manual",
   pauseRatio: 1.2,
-  ...readStored(SETTINGS_KEY, {}),
+  ...storedSettings,
 };
+if (!["sequence", "count", "infinite"].includes(settings.playbackMode)) {
+  settings.playbackMode = storedSettings.repeatOne ? "infinite" : "sequence";
+}
+settings.repeatCount = Math.min(99, Math.max(2, Math.round(Number(settings.repeatCount) || 3)));
+delete settings.repeatOne;
 const positions = readStored(POSITIONS_KEY, {});
 const loops = readStored(LOOPS_KEY, {});
 
 rateSelect.value = String(settings.rate);
+playbackModeSelect.value = settings.playbackMode;
+repeatCountInput.value = String(settings.repeatCount);
 pauseRatioSelect.value = String(settings.pauseRatio);
 audio.playbackRate = settings.rate;
 syncConnectionState();
@@ -91,6 +126,24 @@ function writeStored(key, value) {
   } catch {
     showStatus("設定をこのブラウザに保存できませんでした。再生は続けられます。", "error");
   }
+}
+
+function getTranslationAccessKey() {
+  try {
+    return localStorage.getItem(TRANSLATION_ACCESS_KEY)?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+function openTranslationSettings() {
+  translationAccessKeyInput.value = getTranslationAccessKey();
+  if (typeof translationSettingsDialog.showModal === "function") {
+    if (!translationSettingsDialog.open) translationSettingsDialog.showModal();
+  } else {
+    translationSettingsDialog.setAttribute("open", "");
+  }
+  window.setTimeout(() => translationAccessKeyInput.focus(), 0);
 }
 
 function openTranscriptDatabase() {
@@ -237,10 +290,12 @@ function readTrackDuration(track) {
 
 function selectTrack(index, autoplay = false) {
   if (!tracks[index]) return;
+  if (wordDialog.open) wordDialog.close();
   cancelPracticePause(false);
   saveCurrentPosition();
   audio.pause();
   currentIndex = index;
+  completedPlaysForCurrentTrack = 0;
   pendingAutoplay = autoplay;
   const track = tracks[index];
 
@@ -352,7 +407,6 @@ function syncControls() {
     nextButton,
     backButton,
     forwardButton,
-    repeatButton,
     setAButton,
     setBButton,
   ];
@@ -365,8 +419,10 @@ function syncControls() {
   clearLoopButton.disabled = !hasTrack || (!Number.isFinite(loop.a) && !Number.isFinite(loop.b));
   loopToggleButton.disabled = !hasTrack || !validLoop(loop);
 
-  repeatButton.setAttribute("aria-pressed", String(settings.repeatOne));
-  repeatButton.textContent = `1曲リピート：${settings.repeatOne ? "入" : "切"}`;
+  playbackModeSelect.value = settings.playbackMode;
+  repeatCountInput.value = String(settings.repeatCount);
+  repeatCountGroup.hidden = settings.playbackMode !== "count";
+  repeatCountInput.disabled = settings.playbackMode !== "count";
 }
 
 function syncPracticeUi() {
@@ -382,10 +438,19 @@ function syncPracticeUi() {
   }
 
   delete practiceStatus.dataset.state;
-  if (settings.repeatOne) {
-    practiceStatus.textContent = "1曲リピートが入っている間は、同じ音声を繰り返します。";
+  const countProgress = completedPlaysForCurrentTrack > 0
+    ? ` 次は${Math.min(completedPlaysForCurrentTrack + 1, settings.repeatCount)}/${settings.repeatCount}回目です。`
+    : "";
+  if (mode === "auto" && settings.playbackMode === "infinite") {
+    practiceStatus.textContent = `終了後、再生時間の${settings.pauseRatio}倍待って同じ音声を再生します。`;
+  } else if (mode === "auto" && settings.playbackMode === "count") {
+    practiceStatus.textContent = `各音声を${settings.repeatCount}回ずつ、間を空けて再生してから次へ進みます。${countProgress}`;
   } else if (mode === "auto") {
-    practiceStatus.textContent = `ファイル終了後、実際の再生時間の${settings.pauseRatio}倍待って次の音声を自動再生します。`;
+    practiceStatus.textContent = `終了後、再生時間の${settings.pauseRatio}倍待って次の音声を自動再生します。`;
+  } else if (settings.playbackMode === "infinite") {
+    practiceStatus.textContent = "終了後、再生ボタンを押すまで待ち、同じ音声を再生します。";
+  } else if (settings.playbackMode === "count") {
+    practiceStatus.textContent = `各音声を${settings.repeatCount}回ずつ再生してから次へ進みます。再生の間はボタンを押すまで待ちます。${countProgress}`;
   } else {
     practiceStatus.textContent = "ファイル終了後、次の音声を選んだ状態で再生ボタンを待ちます。";
   }
@@ -394,32 +459,32 @@ function syncPracticeUi() {
 function setPracticeMode(mode) {
   cancelPracticePause(false);
   settings.practiceMode = mode;
-  settings.repeatOne = false;
   writeStored(SETTINGS_KEY, settings);
   syncControls();
   syncPracticeUi();
 }
 
-function startAutoNextPause() {
-  if (isPracticePause || currentIndex >= tracks.length - 1) return;
+function startAutoNextPause(targetIndex) {
+  if (isPracticePause || !tracks[targetIndex]) return;
   const playedSeconds = audio.duration / Math.max(audio.playbackRate, 0.1);
   const pauseSeconds = Math.max(1, playedSeconds * Number(settings.pauseRatio));
   isPracticePause = true;
-  pendingPracticeNextIndex = currentIndex + 1;
+  pendingPracticeTargetIndex = targetIndex;
   practicePauseUntil = Date.now() + pauseSeconds * 1000;
   updatePracticeCountdown();
   practiceCountdownTimer = window.setInterval(updatePracticeCountdown, 250);
   practicePauseTimer = window.setTimeout(() => {
-    const nextIndex = pendingPracticeNextIndex;
+    const nextIndex = pendingPracticeTargetIndex;
     cancelPracticePause(false);
-    if (tracks[nextIndex]) selectTrack(nextIndex, true);
+    activatePracticeTarget(nextIndex, true);
   }, pauseSeconds * 1000);
 }
 
 function updatePracticeCountdown() {
   const remaining = Math.max(0, Math.ceil((practicePauseUntil - Date.now()) / 1000));
+  const target = pendingPracticeTargetIndex === currentIndex ? "同じ音声" : "次の音声";
   practiceStatus.dataset.state = "paused";
-  practiceStatus.textContent = `リピーティング中 — あと${remaining}秒で次の音声を再生します。`;
+  practiceStatus.textContent = `リピーティング中 — あと${remaining}秒で${target}を再生します。`;
 }
 
 function cancelPracticePause(updateUi = true) {
@@ -428,12 +493,196 @@ function cancelPracticePause(updateUi = true) {
   practicePauseTimer = null;
   practiceCountdownTimer = null;
   isPracticePause = false;
-  pendingPracticeNextIndex = -1;
+  pendingPracticeTargetIndex = -1;
   if (updateUi) syncPracticeUi();
+}
+
+function normalizeTimedWords(words) {
+  if (!Array.isArray(words)) return [];
+  return words
+    .map((word) => {
+      const rawStart = word.start ?? word.timestamp?.[0];
+      const rawEnd = word.end ?? word.timestamp?.[1];
+      return {
+        text: String(word.text || "").trim(),
+        start: rawStart == null ? Number.NaN : Number(rawStart),
+        end: rawEnd == null ? Number.NaN : Number(rawEnd),
+      };
+    })
+    .filter((word) => word.text && Number.isFinite(word.start));
+}
+
+function wordCacheKey(text) {
+  return text.toLocaleLowerCase("en").replace(/^[^a-z0-9']+|[^a-z0-9']+$/g, "") || text;
+}
+
+function renderSynchronizedTranscript(words) {
+  const normalizedWords = normalizeTimedWords(words);
+  syncTranscript.replaceChildren();
+  syncWordButtons = [];
+  activeSyncWordIndex = -1;
+  syncScript.hidden = normalizedWords.length === 0;
+  if (normalizedWords.length === 0) return;
+
+  normalizedWords.forEach((word, index) => {
+    const button = document.createElement("button");
+    button.className = "sync-word";
+    button.type = "button";
+    button.textContent = word.text;
+    button.dataset.start = String(word.start);
+    if (Number.isFinite(word.end)) button.dataset.end = String(word.end);
+    button.setAttribute("aria-label", `${word.text}、${formatTime(word.start)}から`);
+    button.addEventListener("click", () => handleSynchronizedWord(word, button));
+    syncWordButtons.push(button);
+    syncTranscript.append(button);
+  });
+  updateTranscriptHighlight();
+}
+
+function renderTranslation(text) {
+  const translation = String(text || "").trim();
+  translationOutput.textContent = translation;
+  translationPanel.hidden = !activeTranscriptRecord?.text;
+  translateButton.disabled = !activeTranscriptRecord?.text || translatingTrackId !== null;
+  translateButton.textContent = translation ? "日本語訳を再生成" : "日本語訳を生成";
+  if (translation) {
+    translationStatus.textContent = "日本語訳もこのブラウザに保存されています。";
+    delete translationStatus.dataset.state;
+  } else if (activeTranscriptRecord?.text && !getTranslationAccessKey()) {
+    translationStatus.textContent = "OpenAI翻訳を使うには、最初にAPI設定から翻訳アクセスキーを保存してください。";
+    delete translationStatus.dataset.state;
+  } else {
+    translationStatus.textContent = activeTranscriptRecord?.text
+      ? "日本語訳はOpenAI APIで生成します。"
+      : "";
+    delete translationStatus.dataset.state;
+  }
+}
+
+function updateTranscriptHighlight() {
+  const words = normalizeTimedWords(activeTranscriptRecord?.words);
+  if (words.length === 0 || syncWordButtons.length !== words.length) return;
+  const time = audio.currentTime;
+  let nextIndex = -1;
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    const nextStart = words[index + 1]?.start ?? Number.POSITIVE_INFINITY;
+    const end = Number.isFinite(word.end) ? Math.max(word.end, word.start + 0.05) : nextStart;
+    if (time >= word.start && time < Math.min(end, nextStart)) {
+      nextIndex = index;
+      break;
+    }
+  }
+  if (nextIndex === activeSyncWordIndex) return;
+  if (activeSyncWordIndex >= 0) {
+    syncWordButtons[activeSyncWordIndex]?.removeAttribute("data-active");
+    syncWordButtons[activeSyncWordIndex]?.removeAttribute("aria-current");
+  }
+  activeSyncWordIndex = nextIndex;
+  if (nextIndex >= 0) {
+    const activeButton = syncWordButtons[nextIndex];
+    activeButton.dataset.active = "true";
+    activeButton.setAttribute("aria-current", "true");
+    activeButton.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+}
+
+function openWordDialog() {
+  if (typeof wordDialog.showModal === "function") {
+    if (!wordDialog.open) wordDialog.showModal();
+  } else {
+    wordDialog.setAttribute("open", "");
+  }
+}
+
+function handleSynchronizedWord(word) {
+  if (!audio.paused) {
+    cancelPracticePause();
+    audio.currentTime = Math.max(0, word.start);
+    updateTimeline();
+    return;
+  }
+
+  const key = wordCacheKey(word.text);
+  selectedWord = { ...word, key, trackId: currentTrack()?.id };
+  wordDialogTitle.textContent = word.text;
+  const cachedTranslation = activeTranscriptRecord?.wordTranslations?.[key];
+  wordDialogTranslation.textContent = cachedTranslation || "翻訳を準備しています。";
+  openWordDialog();
+  if (cachedTranslation || !selectedWord.trackId) return;
+  if (!getTranslationAccessKey()) {
+    wordDialogTranslation.textContent = "先にOpenAI翻訳のAPI設定が必要です。";
+    return;
+  }
+  requestOpenAITranslation({
+    purpose: "word",
+    id: selectedWord.trackId,
+    key,
+    text: word.text,
+  });
+}
+
+function resolvePlaybackAfterEnd(playbackMode, index, trackCount, repeatCount, completedPlays) {
+  if (playbackMode === "infinite") {
+    return { targetIndex: index, completedPlays };
+  }
+
+  if (playbackMode === "count") {
+    const nextCompletedPlays = completedPlays + 1;
+    if (nextCompletedPlays < repeatCount) {
+      return { targetIndex: index, completedPlays: nextCompletedPlays };
+    }
+    return {
+      targetIndex: index < trackCount - 1 ? index + 1 : -1,
+      completedPlays: 0,
+    };
+  }
+
+  return {
+    targetIndex: index < trackCount - 1 ? index + 1 : -1,
+    completedPlays: 0,
+  };
+}
+
+function nextTargetAfterEnded() {
+  const result = resolvePlaybackAfterEnd(
+    settings.playbackMode,
+    currentIndex,
+    tracks.length,
+    settings.repeatCount,
+    completedPlaysForCurrentTrack,
+  );
+  completedPlaysForCurrentTrack = result.completedPlays;
+  return result.targetIndex;
+}
+
+async function activatePracticeTarget(targetIndex, autoplay) {
+  if (!tracks[targetIndex]) return;
+  if (targetIndex !== currentIndex) {
+    selectTrack(targetIndex, autoplay);
+    return;
+  }
+
+  audio.currentTime = 0;
+  const track = currentTrack();
+  if (track) {
+    positions[track.id] = 0;
+    writeStored(POSITIONS_KEY, positions);
+  }
+  updateTimeline();
+  syncPracticeUi();
+  if (!autoplay) return;
+
+  try {
+    await audio.play();
+  } catch {
+    showStatus("自動再生できませんでした。再生ボタンを押してください。", "error");
+  }
 }
 
 function resetTranscriptPanel() {
   window.clearTimeout(transcriptSaveTimer);
+  activeTranscriptRecord = null;
   transcriptOutput.value = "";
   delete transcriptOutput.dataset.state;
   transcriptOutput.disabled = true;
@@ -442,9 +691,12 @@ function resetTranscriptPanel() {
   deleteTranscriptButton.disabled = true;
   delete transcriptStatus.dataset.state;
   transcriptStatus.textContent = "音声を選ぶと、保存済みスクリプトを確認できます。";
+  renderSynchronizedTranscript([]);
+  renderTranslation("");
 }
 
 async function loadTranscript(track) {
+  activeTranscriptRecord = null;
   transcriptOutput.value = "";
   transcriptOutput.dataset.state = "loading";
   transcriptOutput.disabled = false;
@@ -453,21 +705,30 @@ async function loadTranscript(track) {
   deleteTranscriptButton.disabled = true;
   transcriptStatus.dataset.state = "loading";
   transcriptStatus.textContent = "保存済みスクリプトを確認しています。";
+  renderSynchronizedTranscript([]);
+  renderTranslation("");
 
   try {
     const record = await getStoredTranscript(track.id);
     if (currentTrack()?.id !== track.id) return;
     if (record?.text) {
+      activeTranscriptRecord = record;
       transcriptOutput.value = record.text;
       transcriptOutput.dataset.state = "success";
       saveTranscriptButton.disabled = false;
       deleteTranscriptButton.disabled = false;
       transcriptStatus.dataset.state = "success";
       transcriptStatus.textContent = "この音声の保存済みスクリプトを表示しています。";
+      renderSynchronizedTranscript(record.words || []);
+      renderTranslation(record.translation || "");
+      if (!record.translation && getTranslationAccessKey()) startTranslation(record);
     } else {
+      activeTranscriptRecord = null;
       delete transcriptOutput.dataset.state;
       delete transcriptStatus.dataset.state;
       transcriptStatus.textContent = "まだスクリプトはありません。初回生成時は約100MBの認識モデルを取得します。";
+      renderSynchronizedTranscript([]);
+      renderTranslation("");
     }
   } catch {
     if (currentTrack()?.id !== track.id) return;
@@ -477,14 +738,16 @@ async function loadTranscript(track) {
   }
 }
 
-function getTranscriptionWorker() {
-  if (transcriptionWorker) return transcriptionWorker;
-  transcriptionWorker = new Worker("./transcription-worker.js", { type: "module" });
-  transcriptionWorker.addEventListener("message", handleTranscriptionMessage);
-  transcriptionWorker.addEventListener("error", () => {
-    finishTranscriptionWithError("文字起こし処理を開始できませんでした。通信状態を確認してください。");
+function getLanguageWorker() {
+  if (languageWorker) return languageWorker;
+  languageWorker = new Worker("./transcription-worker.js?v=15", { type: "module" });
+  languageWorker.addEventListener("message", handleLanguageWorkerMessage);
+  languageWorker.addEventListener("error", () => {
+    if (transcribingTrackId) {
+      finishTranscriptionWithError("文字起こし処理を開始できませんでした。通信状態を確認してください。");
+    }
   });
-  return transcriptionWorker;
+  return languageWorker;
 }
 
 async function decodeForTranscription(file) {
@@ -529,7 +792,7 @@ async function startTranscription() {
       throw new Error("Audio is longer than 30 minutes");
     }
     transcriptStatus.textContent = "英語認識モデルを準備しています。初回は時間がかかります。";
-    getTranscriptionWorker().postMessage(
+    getLanguageWorker().postMessage(
       { type: "transcribe", id: track.id, audio: audioData.buffer },
       [audioData.buffer],
     );
@@ -542,7 +805,7 @@ async function startTranscription() {
   }
 }
 
-async function handleTranscriptionMessage(event) {
+async function handleLanguageWorkerMessage(event) {
   const message = event.data;
   if (message.type === "progress") {
     const rawProgress = Number(message.progress);
@@ -578,23 +841,31 @@ async function handleTranscriptionMessage(event) {
   }
 
   const track = tracks.find((candidate) => candidate.id === message.id);
+  const record = {
+    id: message.id,
+    text,
+    words: normalizeTimedWords(message.words),
+    translation: "",
+    wordTranslations: {},
+    source: "whisper-tiny.en_timestamped",
+    updatedAt: new Date().toISOString(),
+  };
   try {
-    await putStoredTranscript({
-      id: message.id,
-      text,
-      source: "whisper-tiny.en",
-      updatedAt: new Date().toISOString(),
-    });
+    await putStoredTranscript(record);
     if (currentTrack()?.id === message.id) {
+      activeTranscriptRecord = record;
       transcriptOutput.value = text;
       transcriptOutput.dataset.state = "success";
       saveTranscriptButton.disabled = false;
       deleteTranscriptButton.disabled = false;
       transcriptStatus.dataset.state = "success";
       transcriptStatus.textContent = "英文を生成し、このブラウザに保存しました。必要なら修正できます。";
+      renderSynchronizedTranscript(record.words);
+      renderTranslation("");
     } else if (track) {
       showStatus(`${track.file.name}の英語スクリプトを保存しました。`);
     }
+    if (getTranslationAccessKey()) startTranslation(record);
   } catch {
     if (currentTrack()?.id === message.id) {
       transcriptOutput.value = text;
@@ -605,6 +876,125 @@ async function handleTranscriptionMessage(event) {
   } finally {
     finishTranscription();
   }
+}
+
+function startTranslation(record, force = false) {
+  if (!record?.id || !record.text || translatingTrackId) return;
+  if (record.translation && !force) {
+    if (currentTrack()?.id === record.id) renderTranslation(record.translation);
+    return;
+  }
+  if (!getTranslationAccessKey()) {
+    if (currentTrack()?.id === record.id) {
+      translationPanel.hidden = false;
+      translationStatus.dataset.state = "error";
+      translationStatus.textContent = "OpenAI翻訳を使うには、API設定から翻訳アクセスキーを保存してください。";
+    }
+    if (force) openTranslationSettings();
+    return;
+  }
+  translatingTrackId = record.id;
+  if (currentTrack()?.id === record.id) {
+    translationPanel.hidden = false;
+    translateButton.disabled = true;
+    translationStatus.dataset.state = "loading";
+    translationStatus.textContent = "OpenAI APIで日本語訳を生成しています。";
+  }
+  requestOpenAITranslation({ purpose: "full", id: record.id, text: record.text });
+}
+
+async function requestOpenAITranslation({ purpose, id, key = "", text }) {
+  const accessKey = getTranslationAccessKey();
+  const requestKey = `${id}:${key}`;
+  if (!accessKey) return;
+  if (purpose === "word") {
+    if (translatingWordKeys.has(requestKey)) return;
+    translatingWordKeys.add(requestKey);
+  }
+
+  try {
+    const response = await fetch(TRANSLATION_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Translation-Key": accessKey,
+      },
+      body: JSON.stringify({ type: purpose, text }),
+    });
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch {
+      payload = {};
+    }
+    if (!response.ok) {
+      const error = new Error(payload.error || "Translation request failed");
+      error.status = response.status;
+      throw error;
+    }
+    const translation = String(payload.translation || "").trim();
+    if (!translation) throw new Error("Empty translation");
+
+    const existing = await getStoredTranscript(id);
+    if (!existing?.text) return;
+    const updatedRecord = purpose === "word"
+      ? {
+          ...existing,
+          wordTranslations: {
+            ...(existing.wordTranslations || {}),
+            [key]: translation,
+          },
+        }
+      : {
+          ...existing,
+          translation,
+          translatedAt: new Date().toISOString(),
+        };
+    await putStoredTranscript(updatedRecord);
+    if (currentTrack()?.id === id) activeTranscriptRecord = updatedRecord;
+
+    if (purpose === "word") {
+      if (selectedWord?.trackId === id && selectedWord.key === key) {
+        wordDialogTranslation.textContent = translation;
+      }
+    } else if (currentTrack()?.id === id) {
+      renderTranslation(translation);
+    }
+  } catch (error) {
+    console.error("OpenAI translation failed:", error);
+    if (purpose === "word") {
+      if (selectedWord?.trackId === id && selectedWord.key === key) {
+        wordDialogTranslation.textContent = translationErrorMessage(error);
+      }
+    } else {
+      showTranslationError(id, translationErrorMessage(error));
+    }
+  } finally {
+    if (purpose === "word") {
+      translatingWordKeys.delete(requestKey);
+    } else {
+      translatingTrackId = null;
+      if (currentTrack()?.id === id) translateButton.disabled = false;
+      if (activeTranscriptRecord?.id !== id && activeTranscriptRecord?.text && !activeTranscriptRecord.translation) {
+        startTranslation(activeTranscriptRecord);
+      }
+    }
+  }
+}
+
+function translationErrorMessage(error) {
+  if (error?.status === 401) return "翻訳アクセスキーが正しくありません。API設定を確認してください。";
+  if (error?.status === 429) return "翻訳の利用回数が上限に達しました。少し待ってから試してください。";
+  if (error?.status === 503) return "翻訳サーバーのOpenAI API設定が完了していません。";
+  return "OpenAI APIで日本語訳を生成できませんでした。通信状態を確認してください。";
+}
+
+function showTranslationError(id, message = "OpenAI APIで日本語訳を生成できませんでした。") {
+  if (currentTrack()?.id !== id) return;
+  translationPanel.hidden = false;
+  translateButton.disabled = false;
+  translationStatus.dataset.state = "error";
+  translationStatus.textContent = message;
 }
 
 function finishTranscription() {
@@ -625,18 +1015,30 @@ async function saveTranscript() {
   const track = currentTrack();
   const text = transcriptOutput.value.trim();
   if (!track || !text) return;
+  const textChanged = activeTranscriptRecord?.text !== text;
+  const record = {
+    ...(activeTranscriptRecord || {}),
+    id: track.id,
+    text,
+    words: textChanged ? [] : (activeTranscriptRecord?.words || []),
+    translation: textChanged ? "" : (activeTranscriptRecord?.translation || ""),
+    wordTranslations: textChanged ? {} : (activeTranscriptRecord?.wordTranslations || {}),
+    source: "edited",
+    updatedAt: new Date().toISOString(),
+  };
   try {
-    await putStoredTranscript({
-      id: track.id,
-      text,
-      source: "edited",
-      updatedAt: new Date().toISOString(),
-    });
+    await putStoredTranscript(record);
+    activeTranscriptRecord = record;
     saveTranscriptButton.dataset.state = "success";
     transcriptOutput.dataset.state = "success";
     deleteTranscriptButton.disabled = false;
     transcriptStatus.dataset.state = "success";
-    transcriptStatus.textContent = "修正したスクリプトを保存しました。";
+    transcriptStatus.textContent = textChanged
+      ? "修正したスクリプトを保存しました。単語同期は再生成すると利用できます。"
+      : "スクリプトを保存しました。";
+    renderSynchronizedTranscript(record.words);
+    renderTranslation(record.translation);
+    if (!record.translation && getTranslationAccessKey()) startTranslation(record);
     window.setTimeout(() => delete saveTranscriptButton.dataset.state, 1200);
   } catch {
     transcriptOutput.dataset.state = "error";
@@ -650,12 +1052,15 @@ async function removeStoredTranscript() {
   if (!track) return;
   try {
     await deleteStoredTranscript(track.id);
+    activeTranscriptRecord = null;
     transcriptOutput.value = "";
     delete transcriptOutput.dataset.state;
     saveTranscriptButton.disabled = true;
     deleteTranscriptButton.disabled = true;
     delete transcriptStatus.dataset.state;
     transcriptStatus.textContent = "保存済みスクリプトを削除しました。音声から再生成できます。";
+    renderSynchronizedTranscript([]);
+    renderTranslation("");
   } catch {
     transcriptOutput.dataset.state = "error";
     transcriptStatus.dataset.state = "error";
@@ -732,10 +1137,10 @@ function toggleLoop() {
 async function togglePlayback() {
   if (!currentTrack()) return;
   if (audio.paused) {
-    if (isPracticePause && pendingPracticeNextIndex >= 0) {
-      const nextIndex = pendingPracticeNextIndex;
+    if (isPracticePause && pendingPracticeTargetIndex >= 0) {
+      const nextIndex = pendingPracticeTargetIndex;
       cancelPracticePause(false);
-      selectTrack(nextIndex, true);
+      activatePracticeTarget(nextIndex, true);
       return;
     }
     cancelPracticePause();
@@ -777,6 +1182,7 @@ function updateTimeline() {
   seek.style.setProperty("--progress", `${progress}%`);
   currentTimeLabel.textContent = formatTime(audio.currentTime);
   durationLabel.textContent = formatTime(duration);
+  updateTranscriptHighlight();
 
   const loop = currentLoop();
   if (loop.enabled && validLoop(loop) && audio.currentTime >= loop.b - 0.04) {
@@ -862,18 +1268,75 @@ pauseRatioSelect.addEventListener("change", () => {
 transcribeButton.addEventListener("click", startTranscription);
 saveTranscriptButton.addEventListener("click", saveTranscript);
 deleteTranscriptButton.addEventListener("click", removeStoredTranscript);
+translateButton.addEventListener("click", () => startTranslation(activeTranscriptRecord, true));
+translationSettingsButton.addEventListener("click", openTranslationSettings);
+translationSettingsClose.addEventListener("click", () => translationSettingsDialog.close());
+translationSettingsForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const accessKey = translationAccessKeyInput.value.trim();
+  if (!accessKey) return;
+  try {
+    localStorage.setItem(TRANSLATION_ACCESS_KEY, accessKey);
+  } catch {
+    showStatus("翻訳アクセスキーをこのブラウザに保存できませんでした。", "error");
+    return;
+  }
+  translationSettingsDialog.close();
+  renderTranslation(activeTranscriptRecord?.translation || "");
+  if (activeTranscriptRecord?.text && !activeTranscriptRecord.translation) {
+    startTranslation(activeTranscriptRecord, true);
+  }
+});
 transcriptOutput.addEventListener("input", () => {
   delete transcriptOutput.dataset.state;
   saveTranscriptButton.disabled = transcriptOutput.value.trim().length === 0;
+  const unchanged = transcriptOutput.value.trim() === activeTranscriptRecord?.text;
+  renderSynchronizedTranscript(unchanged ? activeTranscriptRecord?.words : []);
+  renderTranslation(unchanged ? activeTranscriptRecord?.translation : "");
 });
 
-repeatButton.addEventListener("click", () => {
-  settings.repeatOne = !settings.repeatOne;
+playWordButton.addEventListener("click", async () => {
+  if (!selectedWord || !currentTrack()) return;
+  if (wordDialog.open) wordDialog.close();
+  cancelPracticePause();
+  audio.currentTime = Math.max(0, selectedWord.start);
+  updateTimeline();
+  try {
+    await audio.play();
+  } catch {
+    showStatus("この位置から再生できませんでした。再生ボタンを押してください。", "error");
+  }
+});
+
+wordDialog.addEventListener("close", () => {
+  selectedWord = null;
+});
+
+playbackModeSelect.addEventListener("change", () => {
+  settings.playbackMode = playbackModeSelect.value;
+  completedPlaysForCurrentTrack = 0;
   cancelPracticePause(false);
   writeStored(SETTINGS_KEY, settings);
   syncControls();
   syncPracticeUi();
 });
+
+function updateRepeatCount(normalizeInput = false) {
+  const enteredCount = Number(repeatCountInput.value);
+  if (!Number.isFinite(enteredCount) || enteredCount < 2) {
+    if (normalizeInput) repeatCountInput.value = String(settings.repeatCount);
+    return;
+  }
+  settings.repeatCount = Math.min(99, Math.max(2, Math.round(enteredCount)));
+  if (normalizeInput) repeatCountInput.value = String(settings.repeatCount);
+  completedPlaysForCurrentTrack = 0;
+  cancelPracticePause(false);
+  writeStored(SETTINGS_KEY, settings);
+  syncPracticeUi();
+}
+
+repeatCountInput.addEventListener("input", () => updateRepeatCount(false));
+repeatCountInput.addEventListener("change", () => updateRepeatCount(true));
 
 rateSelect.addEventListener("change", () => {
   settings.rate = Number(rateSelect.value);
@@ -925,18 +1388,19 @@ audio.addEventListener("pause", () => {
 
 audio.addEventListener("ended", () => {
   cancelPracticePause(false);
-  if (settings.repeatOne) {
-    audio.currentTime = 0;
-    audio.play();
-  } else if (currentIndex >= tracks.length - 1) {
+  const targetIndex = nextTargetAfterEnded();
+  if (targetIndex < 0) {
     practiceStatus.dataset.state = "paused";
     practiceStatus.textContent = "再生リストの最後まで終わりました。";
   } else if (settings.practiceMode === "manual") {
-    selectTrack(currentIndex + 1, false);
+    const repeatsSameTrack = targetIndex === currentIndex;
+    activatePracticeTarget(targetIndex, false);
     practiceStatus.dataset.state = "paused";
-    practiceStatus.textContent = "次の音声を選びました。再生ボタンを押すまで待機します。";
+    practiceStatus.textContent = repeatsSameTrack
+      ? "同じ音声を先頭に戻しました。再生ボタンを押すまで待機します。"
+      : "次の音声を選びました。再生ボタンを押すまで待機します。";
   } else {
-    startAutoNextPause();
+    startAutoNextPause(targetIndex);
   }
 });
 
