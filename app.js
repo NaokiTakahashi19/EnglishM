@@ -59,7 +59,9 @@ const LOOPS_KEY = "listening-desk:loops";
 const TRANSCRIPT_DB_NAME = "listening-desk";
 const TRANSCRIPT_STORE_NAME = "transcripts";
 const TRANSLATION_ACCESS_KEY = "listening-desk:translation-access-key";
-const TRANSLATION_API_URL = new URL("./api/translate", window.location.href).href;
+const TRANSLATION_API_URL = window.location.hostname.endsWith(".vercel.app")
+  ? new URL("/api/translate", window.location.origin).href
+  : "https://english-m.vercel.app/api/translate";
 const AUDIO_EXTENSIONS = /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i;
 
 let tracks = [];
