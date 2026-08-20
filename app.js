@@ -14,6 +14,10 @@ const rateSelect = document.querySelector("#playback-rate");
 const playbackModeSelect = document.querySelector("#playback-mode");
 const repeatCountGroup = document.querySelector("#repeat-count-group");
 const repeatCountInput = document.querySelector("#repeat-count");
+const playbackSettingsStatus = document.querySelector("#playback-settings-status");
+const playbackSettingsButton = document.querySelector("#playback-settings-button");
+const playbackSettingsDialog = document.querySelector("#playback-settings-dialog");
+const playbackSettingsClose = document.querySelector("#playback-settings-close");
 const manualNextModeButton = document.querySelector("#manual-next-mode-button");
 const autoNextModeButton = document.querySelector("#auto-next-mode-button");
 const pauseRatioSelect = document.querySelector("#pause-ratio");
@@ -24,7 +28,13 @@ const practiceSettingsClose = document.querySelector("#practice-settings-close")
 const transcribeButton = document.querySelector("#transcribe-button");
 const transcriptOutput = document.querySelector("#transcript-output");
 const transcriptContent = document.querySelector("#transcript-content");
-const transcriptVisibilityButton = document.querySelector("#transcript-visibility-button");
+const transcriptDisplayStatus = document.querySelector("#transcript-display-status");
+const transcriptSettingsButton = document.querySelector("#transcript-settings-button");
+const transcriptSettingsDialog = document.querySelector("#transcript-settings-dialog");
+const transcriptSettingsClose = document.querySelector("#transcript-settings-close");
+const transcriptDisplayModeSelect = document.querySelector("#transcript-display-mode");
+const transcriptShowFromGroup = document.querySelector("#transcript-show-from-group");
+const transcriptShowFromInput = document.querySelector("#transcript-show-from");
 const saveTranscriptButton = document.querySelector("#save-transcript-button");
 const deleteTranscriptButton = document.querySelector("#delete-transcript-button");
 const transcriptStatus = document.querySelector("#transcript-status");
@@ -106,12 +116,14 @@ const settings = {
   practiceMode: "manual",
   pauseRatio: 1.2,
   transcriptVisible: true,
+  transcriptShowFrom: 1,
   ...storedSettings,
 };
 if (!["sequence", "count", "infinite"].includes(settings.playbackMode)) {
   settings.playbackMode = storedSettings.repeatOne ? "infinite" : "sequence";
 }
 settings.repeatCount = Math.min(99, Math.max(2, Math.round(Number(settings.repeatCount) || 3)));
+settings.transcriptShowFrom = Math.min(99, Math.max(1, Math.round(Number(settings.transcriptShowFrom) || 1)));
 delete settings.repeatOne;
 const positions = readStored(POSITIONS_KEY, {});
 const loops = readStored(LOOPS_KEY, {});
@@ -179,11 +191,33 @@ function closeSettingsOnBackdrop(dialog) {
   });
 }
 
+function shouldShowTranscript(transcriptVisible, hasTrack, completedPlays, showFrom) {
+  return transcriptVisible && hasTrack && completedPlays + 1 >= showFrom;
+}
+
 function syncTranscriptVisibility() {
-  const visible = settings.transcriptVisible !== false;
+  const enabled = settings.transcriptVisible !== false;
+  const currentPlayNumber = completedPlaysForCurrentTrack + 1;
+  const hasTrack = currentIndex >= 0;
+  const visible = shouldShowTranscript(enabled, hasTrack, completedPlaysForCurrentTrack, settings.transcriptShowFrom);
   transcriptContent.hidden = !visible;
-  transcriptVisibilityButton.setAttribute("aria-pressed", String(visible));
-  transcriptVisibilityButton.textContent = visible ? "英文を隠す" : "英文を表示";
+  transcriptDisplayModeSelect.value = enabled ? "show" : "hide";
+  transcriptShowFromInput.value = String(settings.transcriptShowFrom);
+  transcriptShowFromGroup.hidden = !enabled;
+  transcriptShowFromInput.disabled = !enabled;
+
+  if (!enabled) {
+    transcriptDisplayStatus.textContent = "非表示";
+  } else if (settings.playbackMode === "sequence" && settings.transcriptShowFrom > 1) {
+    transcriptDisplayStatus.textContent = `表示：${settings.transcriptShowFrom}回目以降・繰り返しなし`;
+  } else if (settings.playbackMode === "count" && settings.transcriptShowFrom > settings.repeatCount) {
+    transcriptDisplayStatus.textContent = `表示：${settings.transcriptShowFrom}回目以降・再生${settings.repeatCount}回`;
+  } else if (hasTrack && !visible) {
+    transcriptDisplayStatus.textContent = `表示：${settings.transcriptShowFrom}回目以降・現在${currentPlayNumber}回目`;
+  } else {
+    transcriptDisplayStatus.textContent = `表示：${settings.transcriptShowFrom}回目以降`;
+  }
+
   if (visible && activeSyncWordIndex >= 0) {
     window.requestAnimationFrame(() => keepActiveWordVisible(syncWordButtons[activeSyncWordIndex]));
   }
@@ -473,6 +507,19 @@ function syncControls() {
   repeatCountInput.value = String(settings.repeatCount);
   repeatCountGroup.hidden = settings.playbackMode !== "count";
   repeatCountInput.disabled = settings.playbackMode !== "count";
+  syncPlaybackSettingsUi();
+}
+
+function syncPlaybackSettingsUi() {
+  const rateLabel = rateSelect.selectedOptions[0]?.textContent || `${settings.rate.toFixed(2)}×`;
+  let modeLabel = "順番に次の音声へ";
+  if (settings.playbackMode === "count") {
+    modeLabel = `各音声${settings.repeatCount}回 → 次へ`;
+  } else if (settings.playbackMode === "infinite") {
+    modeLabel = "同じ音声を無限リピート";
+  }
+  playbackSettingsStatus.textContent = `${rateLabel}・${modeLabel}`;
+  syncTranscriptVisibility();
 }
 
 function syncPracticeUi() {
@@ -687,7 +734,7 @@ function handleSynchronizedWord(word) {
 
 function resolvePlaybackAfterEnd(playbackMode, index, trackCount, repeatCount, completedPlays) {
   if (playbackMode === "infinite") {
-    return { targetIndex: index, completedPlays };
+    return { targetIndex: index, completedPlays: completedPlays + 1 };
   }
 
   if (playbackMode === "count") {
@@ -716,6 +763,7 @@ function nextTargetAfterEnded() {
     completedPlaysForCurrentTrack,
   );
   completedPlaysForCurrentTrack = result.completedPlays;
+  syncTranscriptVisibility();
   return result.targetIndex;
 }
 
@@ -734,6 +782,7 @@ async function activatePracticeTarget(targetIndex, autoplay) {
   }
   updateTimeline();
   syncPracticeUi();
+  syncTranscriptVisibility();
   if (!autoplay) return;
 
   try {
@@ -810,6 +859,7 @@ async function startTranscription() {
     transcriptOutput.dataset.state = "error";
     transcriptStatus.dataset.state = "error";
     transcriptStatus.textContent = "英文生成にはAPI設定の共通アクセスキーが必要です。";
+    if (transcriptSettingsDialog.open) transcriptSettingsDialog.close();
     openTranslationSettings();
     return;
   }
@@ -1288,11 +1338,14 @@ practiceSettingsButton.addEventListener("click", () => {
   const selectedModeButton = settings.practiceMode === "auto" ? autoNextModeButton : manualNextModeButton;
   openSettingsDialog(practiceSettingsDialog, selectedModeButton);
 });
+playbackSettingsButton.addEventListener("click", () => openSettingsDialog(playbackSettingsDialog, rateSelect));
+playbackSettingsClose.addEventListener("click", () => playbackSettingsDialog.close());
 practiceSettingsClose.addEventListener("click", () => practiceSettingsDialog.close());
 loopSettingsButton.addEventListener("click", () => openSettingsDialog(loopSettingsDialog, setAButton));
 loopSettingsClose.addEventListener("click", () => loopSettingsDialog.close());
 closeSettingsOnBackdrop(practiceSettingsDialog);
 closeSettingsOnBackdrop(loopSettingsDialog);
+closeSettingsOnBackdrop(playbackSettingsDialog);
 
 pauseRatioSelect.addEventListener("change", () => {
   settings.pauseRatio = Number(pauseRatioSelect.value);
@@ -1307,7 +1360,10 @@ transcribeButton.addEventListener("click", startTranscription);
 saveTranscriptButton.addEventListener("click", saveTranscript);
 deleteTranscriptButton.addEventListener("click", removeStoredTranscript);
 translateButton.addEventListener("click", () => startTranslation(activeTranscriptRecord, true));
-translationSettingsButton.addEventListener("click", openTranslationSettings);
+translationSettingsButton.addEventListener("click", () => {
+  if (transcriptSettingsDialog.open) transcriptSettingsDialog.close();
+  openTranslationSettings();
+});
 translationSettingsClose.addEventListener("click", () => translationSettingsDialog.close());
 translationSettingsForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -1325,11 +1381,29 @@ translationSettingsForm.addEventListener("submit", (event) => {
     startTranslation(activeTranscriptRecord, true);
   }
 });
-transcriptVisibilityButton.addEventListener("click", () => {
-  settings.transcriptVisible = settings.transcriptVisible === false;
+transcriptSettingsButton.addEventListener("click", () => openSettingsDialog(transcriptSettingsDialog, transcriptDisplayModeSelect));
+transcriptSettingsClose.addEventListener("click", () => transcriptSettingsDialog.close());
+closeSettingsOnBackdrop(transcriptSettingsDialog);
+transcriptDisplayModeSelect.addEventListener("change", () => {
+  settings.transcriptVisible = transcriptDisplayModeSelect.value === "show";
   writeStored(SETTINGS_KEY, settings);
   syncTranscriptVisibility();
 });
+
+function updateTranscriptShowFrom(normalizeInput = false) {
+  const enteredCount = Number(transcriptShowFromInput.value);
+  if (!Number.isFinite(enteredCount) || enteredCount < 1) {
+    if (normalizeInput) transcriptShowFromInput.value = String(settings.transcriptShowFrom);
+    return;
+  }
+  settings.transcriptShowFrom = Math.min(99, Math.max(1, Math.round(enteredCount)));
+  if (normalizeInput) transcriptShowFromInput.value = String(settings.transcriptShowFrom);
+  writeStored(SETTINGS_KEY, settings);
+  syncTranscriptVisibility();
+}
+
+transcriptShowFromInput.addEventListener("input", () => updateTranscriptShowFrom(false));
+transcriptShowFromInput.addEventListener("change", () => updateTranscriptShowFrom(true));
 transcriptOutput.addEventListener("input", () => {
   delete transcriptOutput.dataset.state;
   saveTranscriptButton.disabled = transcriptOutput.value.trim().length === 0;
@@ -1362,6 +1436,7 @@ playbackModeSelect.addEventListener("change", () => {
   writeStored(SETTINGS_KEY, settings);
   syncControls();
   syncPracticeUi();
+  syncTranscriptVisibility();
 });
 
 function updateRepeatCount(normalizeInput = false) {
@@ -1376,6 +1451,7 @@ function updateRepeatCount(normalizeInput = false) {
   cancelPracticePause(false);
   writeStored(SETTINGS_KEY, settings);
   syncPracticeUi();
+  syncPlaybackSettingsUi();
 }
 
 repeatCountInput.addEventListener("input", () => updateRepeatCount(false));
@@ -1385,6 +1461,7 @@ rateSelect.addEventListener("change", () => {
   settings.rate = Number(rateSelect.value);
   audio.playbackRate = settings.rate;
   writeStored(SETTINGS_KEY, settings);
+  syncPlaybackSettingsUi();
 });
 
 seek.addEventListener("input", () => {

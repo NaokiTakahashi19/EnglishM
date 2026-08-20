@@ -96,35 +96,60 @@
             </button>
           </div>
 
-          <div class="study-tools">
-            <div class="field-group">
-              <label for="playback-rate">再生速度</label>
-              <select id="playback-rate" class="field-control" aria-label="再生速度">
-                <option value="0.75">0.75×</option>
-                <option value="0.9">0.90×</option>
-                <option value="1" selected>1.00×</option>
-                <option value="1.1">1.10×</option>
-                <option value="1.25">1.25×</option>
-                <option value="1.5">1.50×</option>
-                <option value="1.75">1.75×</option>
-                <option value="2">2.00×</option>
-              </select>
+          <section class="setting-summary" aria-labelledby="playback-settings-title">
+            <div>
+              <h3 id="playback-settings-title">再生設定</h3>
+              <p class="setting-summary__status" id="playback-settings-status" aria-live="polite">1.00×・順番に次の音声へ</p>
             </div>
+            <button
+              class="control control--quiet setting-summary__button"
+              id="playback-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+            >
+              設定
+            </button>
+          </section>
 
-            <div class="field-group">
-              <label for="playback-mode">再生方法</label>
-              <select id="playback-mode" class="field-control">
-                <option value="sequence">順番に次の音声へ</option>
-                <option value="count">回数を決めて次へ</option>
-                <option value="infinite">同じ音声を無限リピート</option>
-              </select>
-            </div>
+          <dialog class="word-dialog settings-dialog" id="playback-settings-dialog" aria-labelledby="playback-dialog-title" tabindex="-1">
+            <div class="word-dialog__inner">
+              <p class="word-dialog__label">再生設定</p>
+              <h3 id="playback-dialog-title">速度と繰り返し</h3>
+              <p class="settings-dialog__note">再生速度と、音声ごとの繰り返し方法を変更します。</p>
+              <div class="settings-fields">
+                <div class="field-group">
+                  <label for="playback-rate">再生速度</label>
+                  <select id="playback-rate" class="field-control" aria-label="再生速度">
+                    <option value="0.75">0.75×</option>
+                    <option value="0.9">0.90×</option>
+                    <option value="1" selected>1.00×</option>
+                    <option value="1.1">1.10×</option>
+                    <option value="1.25">1.25×</option>
+                    <option value="1.5">1.50×</option>
+                    <option value="1.75">1.75×</option>
+                    <option value="2">2.00×</option>
+                  </select>
+                </div>
 
-            <div class="field-group repeat-count-group" id="repeat-count-group" hidden>
-              <label for="repeat-count">各音声の再生回数</label>
-              <input id="repeat-count" class="field-control" type="number" min="2" max="99" step="1" value="3" inputmode="numeric" />
+                <div class="field-group">
+                  <label for="playback-mode">再生方法</label>
+                  <select id="playback-mode" class="field-control">
+                    <option value="sequence">順番に次の音声へ</option>
+                    <option value="count">回数を決めて次へ</option>
+                    <option value="infinite">同じ音声を無限リピート</option>
+                  </select>
+                </div>
+
+                <div class="field-group repeat-count-group" id="repeat-count-group" hidden>
+                  <label for="repeat-count">各音声の再生回数</label>
+                  <input id="repeat-count" class="field-control" type="number" min="2" max="99" step="1" value="3" inputmode="numeric" />
+                </div>
+              </div>
+              <div class="word-dialog__actions">
+                <button class="control control--primary" id="playback-settings-close" type="button">閉じる</button>
+              </div>
             </div>
-          </div>
+          </dialog>
 
           <section class="setting-summary" aria-labelledby="practice-title">
             <div>
@@ -213,26 +238,45 @@
             </div>
           </dialog>
 
-          <section class="transcript-panel" aria-labelledby="transcript-title">
-            <div class="transcript-panel__heading">
-              <div>
-                <h3 id="transcript-title">英語スクリプト</h3>
-                <p>英文・単語時刻・日本語訳をOpenAI APIで生成し、このブラウザへ保存します。</p>
+          <section class="transcript-panel" aria-label="英語スクリプトと日本語訳">
+            <button
+              class="control transcript-settings-trigger"
+              id="transcript-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+            >
+              <span class="transcript-settings-trigger__copy">
+                <strong>英語スクリプト / 日本語訳</strong>
+                <span id="transcript-display-status" aria-live="polite">表示：1回目以降</span>
+              </span>
+              <span class="transcript-settings-trigger__action">設定</span>
+            </button>
+
+            <dialog class="word-dialog settings-dialog" id="transcript-settings-dialog" aria-labelledby="transcript-settings-title" tabindex="-1">
+              <div class="word-dialog__inner">
+                <p class="word-dialog__label">スクリプト設定</p>
+                <h3 id="transcript-settings-title">表示タイミング</h3>
+                <p class="settings-dialog__note">最初は音声だけを聞き、指定した再生回数から英文と日本語訳を表示できます。</p>
+                <div class="settings-fields">
+                  <div class="field-group">
+                    <label for="transcript-display-mode">スクリプト表示</label>
+                    <select id="transcript-display-mode" class="field-control">
+                      <option value="show">表示する</option>
+                      <option value="hide">表示しない</option>
+                    </select>
+                  </div>
+                  <div class="field-group" id="transcript-show-from-group">
+                    <label for="transcript-show-from">何回目以降に表示するか</label>
+                    <input id="transcript-show-from" class="field-control" type="number" min="1" max="99" step="1" value="1" inputmode="numeric" />
+                  </div>
+                </div>
+                <div class="word-dialog__actions">
+                  <button class="control control--primary" id="transcribe-button" type="button" disabled>音声から生成</button>
+                  <button class="control control--quiet" id="translation-settings-button" type="button">OpenAI API設定</button>
+                  <button class="control control--quiet" id="transcript-settings-close" type="button">閉じる</button>
+                </div>
               </div>
-              <div class="transcript-panel__actions">
-                <button class="control control--text" id="translation-settings-button" type="button">API設定</button>
-                <button
-                  class="control control--text"
-                  id="transcript-visibility-button"
-                  type="button"
-                  aria-controls="transcript-content"
-                  aria-pressed="true"
-                >
-                  英文を隠す
-                </button>
-                <button class="control control--quiet" id="transcribe-button" type="button" disabled>音声から生成</button>
-              </div>
-            </div>
+            </dialog>
 
             <div class="transcript-content" id="transcript-content">
               <label class="visually-hidden" for="transcript-output">生成または編集した英語スクリプト</label>
@@ -260,18 +304,17 @@
               <p class="transcript-status" id="transcript-status" aria-live="polite">
                 API設定の共通アクセスキーを、英文生成と日本語訳の両方に使用します。
               </p>
-            </div>
-
-            <section class="translation-panel" id="translation-panel" aria-labelledby="translation-title" hidden>
-              <div class="translation-panel__heading">
-                <h4 id="translation-title">日本語訳</h4>
-                <div class="translation-panel__actions">
-                  <button class="control control--text" id="translate-button" type="button">日本語訳を生成</button>
+              <section class="translation-panel" id="translation-panel" aria-labelledby="translation-title" hidden>
+                <div class="translation-panel__heading">
+                  <h4 id="translation-title">日本語訳</h4>
+                  <div class="translation-panel__actions">
+                    <button class="control control--text" id="translate-button" type="button">日本語訳を生成</button>
+                  </div>
                 </div>
-              </div>
-              <p class="translation-output" id="translation-output"></p>
-              <p class="translation-status" id="translation-status" aria-live="polite"></p>
-            </section>
+                <p class="translation-output" id="translation-output"></p>
+                <p class="translation-status" id="translation-status" aria-live="polite"></p>
+              </section>
+            </div>
           </section>
 
           <dialog class="word-dialog" id="word-dialog" aria-labelledby="word-dialog-title">

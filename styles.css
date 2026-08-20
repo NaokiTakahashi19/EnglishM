@@ -376,13 +376,6 @@ h3 {
   transform: translate(-50%, -42%);
 }
 
-.study-tools {
-  display: grid;
-  gap: var(--space-lg);
-  padding-block: var(--space-lg);
-  border-block-start: var(--rule-thin) solid var(--color-rule);
-}
-
 .setting-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -408,6 +401,11 @@ h3 {
 .setting-summary__button {
   align-self: center;
   white-space: nowrap;
+}
+
+.settings-fields {
+  display: grid;
+  gap: var(--space-lg);
 }
 
 .practice-modes,
@@ -441,23 +439,10 @@ h3 {
 
 .transcript-panel {
   display: grid;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   padding-block-start: var(--space-lg);
   margin-block-start: var(--space-lg);
   border-block-start: var(--rule-thin) solid var(--color-rule);
-}
-
-.transcript-panel__heading {
-  display: grid;
-  align-items: start;
-  justify-items: start;
-  gap: var(--space-md);
-}
-
-.transcript-panel__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2xs);
 }
 
 .transcript-content {
@@ -465,18 +450,48 @@ h3 {
   gap: var(--space-lg);
 }
 
-.transcript-panel h3 {
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: 700;
-  line-height: 1.2;
+.transcript-settings-trigger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  padding: var(--space-md);
+  text-align: start;
 }
 
-.transcript-panel__heading p,
+.transcript-settings-trigger__copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-xs);
+}
+
+.transcript-settings-trigger strong {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.transcript-settings-trigger__copy > span,
 .transcript-status {
-  margin-block-start: var(--space-xs);
   color: var(--color-muted);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.transcript-settings-trigger__copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transcript-settings-trigger__action {
+  color: var(--color-muted);
+  font-family: var(--font-body);
   font-size: var(--text-sm);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .transcript-output {
@@ -724,11 +739,16 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
 
 .settings-dialog {
   width: 100%;
+  max-width: 100%;
   max-height: 88dvh;
   margin: auto 0 0;
   border-inline: 0;
   border-block-end: 0;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.settings-dialog .word-dialog__inner {
+  padding: var(--space-lg);
 }
 
 .translation-settings-dialog .field-group > span {
@@ -1144,15 +1164,6 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
     padding-block: var(--space-lg);
   }
 
-  .study-tools {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .transcript-panel__heading {
-    display: flex;
-    justify-content: space-between;
-  }
-
   .translation-panel__heading {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -1168,6 +1179,10 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
     margin: auto;
     border: var(--rule-thin) solid var(--color-rule-strong);
     border-radius: var(--radius-sm);
+  }
+
+  .settings-dialog .word-dialog__inner {
+    padding: var(--space-xl);
   }
 
   .loop-points {
