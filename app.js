@@ -20,8 +20,13 @@ const manualNextModeButton = document.querySelector("#manual-next-mode-button");
 const autoNextModeButton = document.querySelector("#auto-next-mode-button");
 const pauseRatioSelect = document.querySelector("#pause-ratio");
 const practiceStatus = document.querySelector("#practice-status");
+const practiceSettingsButton = document.querySelector("#practice-settings-button");
+const practiceSettingsDialog = document.querySelector("#practice-settings-dialog");
+const practiceSettingsClose = document.querySelector("#practice-settings-close");
 const transcribeButton = document.querySelector("#transcribe-button");
 const transcriptOutput = document.querySelector("#transcript-output");
+const transcriptContent = document.querySelector("#transcript-content");
+const transcriptVisibilityButton = document.querySelector("#transcript-visibility-button");
 const saveTranscriptButton = document.querySelector("#save-transcript-button");
 const deleteTranscriptButton = document.querySelector("#delete-transcript-button");
 const transcriptStatus = document.querySelector("#transcript-status");
@@ -46,6 +51,10 @@ const clearLoopButton = document.querySelector("#clear-loop-button");
 const loopToggleButton = document.querySelector("#loop-toggle-button");
 const pointALabel = document.querySelector("#point-a");
 const pointBLabel = document.querySelector("#point-b");
+const loopStatus = document.querySelector("#loop-status");
+const loopSettingsButton = document.querySelector("#loop-settings-button");
+const loopSettingsDialog = document.querySelector("#loop-settings-dialog");
+const loopSettingsClose = document.querySelector("#loop-settings-close");
 const trackList = document.querySelector("#track-list");
 const emptyLibrary = document.querySelector("#empty-library");
 const libraryCount = document.querySelector("#library-count");
@@ -94,6 +103,7 @@ const settings = {
   repeatCount: 3,
   practiceMode: "manual",
   pauseRatio: 1.2,
+  transcriptVisible: true,
   ...storedSettings,
 };
 if (!["sequence", "count", "infinite"].includes(settings.playbackMode)) {
@@ -112,6 +122,7 @@ audio.playbackRate = settings.rate;
 syncConnectionState();
 syncControls();
 syncPracticeUi();
+syncTranscriptVisibility();
 
 function readStored(key, fallback) {
   try {
@@ -146,6 +157,34 @@ function openTranslationSettings() {
     translationSettingsDialog.setAttribute("open", "");
   }
   window.setTimeout(() => translationAccessKeyInput.focus(), 0);
+}
+
+function openSettingsDialog(dialog, preferredFocus) {
+  if (typeof dialog.showModal === "function") {
+    if (!dialog.open) dialog.showModal();
+  } else {
+    dialog.setAttribute("open", "");
+  }
+  window.setTimeout(() => {
+    if (preferredFocus && !preferredFocus.disabled) preferredFocus.focus();
+    else dialog.focus();
+  }, 0);
+}
+
+function closeSettingsOnBackdrop(dialog) {
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+}
+
+function syncTranscriptVisibility() {
+  const visible = settings.transcriptVisible !== false;
+  transcriptContent.hidden = !visible;
+  transcriptVisibilityButton.setAttribute("aria-pressed", String(visible));
+  transcriptVisibilityButton.textContent = visible ? "英文を隠す" : "英文を表示";
+  if (visible && activeSyncWordIndex >= 0) {
+    window.requestAnimationFrame(() => keepActiveWordVisible(syncWordButtons[activeSyncWordIndex]));
+  }
 }
 
 function openTranscriptDatabase() {
@@ -585,8 +624,21 @@ function updateTranscriptHighlight() {
     const activeButton = syncWordButtons[nextIndex];
     activeButton.dataset.active = "true";
     activeButton.setAttribute("aria-current", "true");
-    activeButton.scrollIntoView({ block: "nearest", inline: "nearest" });
+    keepActiveWordVisible(activeButton);
   }
+}
+
+function keepActiveWordVisible(activeButton) {
+  if (!activeButton || syncTranscript.clientHeight === 0) return;
+  const containerRect = syncTranscript.getBoundingClientRect();
+  const wordRect = activeButton.getBoundingClientRect();
+  const inset = 12;
+  if (wordRect.top >= containerRect.top + inset && wordRect.bottom <= containerRect.bottom - inset) return;
+  const offset = wordRect.top - containerRect.top - (syncTranscript.clientHeight - wordRect.height) / 2;
+  syncTranscript.scrollBy({
+    top: offset,
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+  });
 }
 
 function openWordDialog() {
@@ -1092,6 +1144,15 @@ function syncLoopUi() {
   const enabled = validLoop(loop) && loop.enabled === true;
   loopToggleButton.setAttribute("aria-pressed", String(enabled));
   loopToggleButton.textContent = `区間リピート：${enabled ? "入" : "切"}`;
+  if (!currentTrack()) {
+    loopStatus.textContent = "音声を選ぶと区間を設定できます。";
+  } else if (validLoop(loop)) {
+    loopStatus.textContent = `A ${formatTime(loop.a)} 〜 B ${formatTime(loop.b)}・${enabled ? "リピート中" : "停止中"}`;
+  } else if (Number.isFinite(loop.a) || Number.isFinite(loop.b)) {
+    loopStatus.textContent = `A ${Number.isFinite(loop.a) ? formatTime(loop.a) : "—"}・B ${Number.isFinite(loop.b) ? formatTime(loop.b) : "—"}（区間未完成）`;
+  } else {
+    loopStatus.textContent = "区間は未設定です。";
+  }
   syncControls();
 }
 
@@ -1257,6 +1318,15 @@ clearLoopButton.addEventListener("click", clearLoop);
 loopToggleButton.addEventListener("click", toggleLoop);
 manualNextModeButton.addEventListener("click", () => setPracticeMode("manual"));
 autoNextModeButton.addEventListener("click", () => setPracticeMode("auto"));
+practiceSettingsButton.addEventListener("click", () => {
+  const selectedModeButton = settings.practiceMode === "auto" ? autoNextModeButton : manualNextModeButton;
+  openSettingsDialog(practiceSettingsDialog, selectedModeButton);
+});
+practiceSettingsClose.addEventListener("click", () => practiceSettingsDialog.close());
+loopSettingsButton.addEventListener("click", () => openSettingsDialog(loopSettingsDialog, setAButton));
+loopSettingsClose.addEventListener("click", () => loopSettingsDialog.close());
+closeSettingsOnBackdrop(practiceSettingsDialog);
+closeSettingsOnBackdrop(loopSettingsDialog);
 
 pauseRatioSelect.addEventListener("change", () => {
   settings.pauseRatio = Number(pauseRatioSelect.value);
@@ -1288,6 +1358,11 @@ translationSettingsForm.addEventListener("submit", (event) => {
   if (activeTranscriptRecord?.text && !activeTranscriptRecord.translation) {
     startTranslation(activeTranscriptRecord, true);
   }
+});
+transcriptVisibilityButton.addEventListener("click", () => {
+  settings.transcriptVisible = settings.transcriptVisible === false;
+  writeStored(SETTINGS_KEY, settings);
+  syncTranscriptVisibility();
 });
 transcriptOutput.addEventListener("input", () => {
   delete transcriptOutput.dataset.state;

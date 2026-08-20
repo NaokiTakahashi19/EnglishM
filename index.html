@@ -132,58 +132,92 @@
             </div>
           </div>
 
-          <section class="practice-panel" aria-labelledby="practice-title">
-            <div class="practice-panel__heading">
+          <section class="setting-summary" aria-labelledby="practice-title">
+            <div>
               <h3 id="practice-title">リピーティング用の自動ポーズ</h3>
-              <p>再生を自動で止め、声に出して繰り返す時間をつくります。</p>
+              <p class="practice-status setting-summary__status" id="practice-status" aria-live="polite">
+                ファイル終了後、再生ボタンを押すまで次の音声を待ちます。
+              </p>
             </div>
-
-            <div class="practice-modes" role="group" aria-label="自動ポーズ方式">
-              <button class="control control--quiet practice-mode" id="manual-next-mode-button" type="button" aria-pressed="true">
-                手動で次へ
-              </button>
-              <button class="control control--quiet practice-mode" id="auto-next-mode-button" type="button" aria-pressed="false">
-                待って自動再生
-              </button>
-            </div>
-
-            <div class="practice-settings">
-              <div class="field-group">
-                <label for="pause-ratio">自動ポーズの長さ</label>
-                <select id="pause-ratio" class="field-control" disabled>
-                  <option value="1.1">再生時間の1.1倍</option>
-                  <option value="1.2" selected>再生時間の1.2倍</option>
-                  <option value="1.5">再生時間の1.5倍</option>
-                </select>
-              </div>
-            </div>
-
-            <p class="practice-status" id="practice-status" aria-live="polite">ファイル終了後、再生ボタンを押すまで次の音声を待ちます。</p>
+            <button
+              class="control control--quiet setting-summary__button"
+              id="practice-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+            >
+              設定
+            </button>
           </section>
 
-          <section class="loop-ledger" aria-labelledby="loop-title">
-            <div class="loop-ledger__heading">
-              <div>
-                <h3 id="loop-title">A–Bリピート</h3>
-                <p>区間の始点と終点を、再生中の位置で記録します。</p>
+          <dialog class="word-dialog settings-dialog" id="practice-settings-dialog" aria-labelledby="practice-settings-title" tabindex="-1">
+            <div class="word-dialog__inner">
+              <p class="word-dialog__label">リピーティング設定</p>
+              <h3 id="practice-settings-title">自動ポーズ</h3>
+              <p class="settings-dialog__note">再生後に、声に出して繰り返すための待ち時間と進み方を変更します。</p>
+              <div class="practice-modes" role="group" aria-label="自動ポーズ方式">
+                <button class="control control--quiet practice-mode" id="manual-next-mode-button" type="button" aria-pressed="true">
+                  手動で次へ
+                </button>
+                <button class="control control--quiet practice-mode" id="auto-next-mode-button" type="button" aria-pressed="false">
+                  待って自動再生
+                </button>
               </div>
-              <button class="control control--text" id="clear-loop-button" type="button" disabled>解除</button>
-            </div>
 
-            <div class="loop-points">
-              <button class="loop-point" id="set-a-button" type="button" disabled>
-                <span>A点</span>
-                <strong id="point-a">—</strong>
-              </button>
-              <button class="loop-point" id="set-b-button" type="button" disabled>
-                <span>B点</span>
-                <strong id="point-b">—</strong>
-              </button>
-              <button class="control control--quiet loop-toggle" id="loop-toggle-button" type="button" aria-pressed="false" disabled>
-                区間リピート：切
-              </button>
+              <div class="practice-settings">
+                <div class="field-group">
+                  <label for="pause-ratio">自動ポーズの長さ</label>
+                  <select id="pause-ratio" class="field-control" disabled>
+                    <option value="1.1">再生時間の1.1倍</option>
+                    <option value="1.2" selected>再生時間の1.2倍</option>
+                    <option value="1.5">再生時間の1.5倍</option>
+                  </select>
+                </div>
+              </div>
+              <div class="word-dialog__actions">
+                <button class="control control--primary" id="practice-settings-close" type="button">閉じる</button>
+              </div>
             </div>
+          </dialog>
+
+          <section class="setting-summary" aria-labelledby="loop-title">
+            <div>
+              <h3 id="loop-title">A–Bリピート</h3>
+              <p class="setting-summary__status" id="loop-status" aria-live="polite">区間は未設定です。</p>
+            </div>
+            <button
+              class="control control--quiet setting-summary__button"
+              id="loop-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+            >
+              設定
+            </button>
           </section>
+
+          <dialog class="word-dialog settings-dialog" id="loop-settings-dialog" aria-labelledby="loop-settings-title" tabindex="-1">
+            <div class="word-dialog__inner">
+              <p class="word-dialog__label">区間設定</p>
+              <h3 id="loop-settings-title">A–Bリピート</h3>
+              <p class="settings-dialog__note">再生中の位置をA点・B点として記録し、その区間だけを繰り返します。</p>
+              <div class="loop-points">
+                <button class="loop-point" id="set-a-button" type="button" disabled>
+                  <span>A点</span>
+                  <strong id="point-a">—</strong>
+                </button>
+                <button class="loop-point" id="set-b-button" type="button" disabled>
+                  <span>B点</span>
+                  <strong id="point-b">—</strong>
+                </button>
+                <button class="control control--quiet loop-toggle" id="loop-toggle-button" type="button" aria-pressed="false" disabled>
+                  区間リピート：切
+                </button>
+              </div>
+              <div class="word-dialog__actions">
+                <button class="control control--text" id="clear-loop-button" type="button" disabled>区間を解除</button>
+                <button class="control control--primary" id="loop-settings-close" type="button">閉じる</button>
+              </div>
+            </div>
+          </dialog>
 
           <section class="transcript-panel" aria-labelledby="transcript-title">
             <div class="transcript-panel__heading">
@@ -193,27 +227,46 @@
               </div>
               <div class="transcript-panel__actions">
                 <button class="control control--text" id="translation-settings-button" type="button">API設定</button>
+                <button
+                  class="control control--text"
+                  id="transcript-visibility-button"
+                  type="button"
+                  aria-controls="transcript-content"
+                  aria-pressed="true"
+                >
+                  英文を隠す
+                </button>
                 <button class="control control--quiet" id="transcribe-button" type="button" disabled>音声から生成</button>
               </div>
             </div>
 
-            <label class="visually-hidden" for="transcript-output">生成または編集した英語スクリプト</label>
-            <textarea
-              class="transcript-output"
-              id="transcript-output"
-              rows="8"
-              placeholder="音声を選び「音声から生成」を押すと、英文がここに表示されます。"
-              disabled
-            ></textarea>
+            <div class="transcript-content" id="transcript-content">
+              <label class="visually-hidden" for="transcript-output">生成または編集した英語スクリプト</label>
+              <textarea
+                class="transcript-output"
+                id="transcript-output"
+                rows="8"
+                placeholder="音声を選び「音声から生成」を押すと、英文がここに表示されます。"
+                disabled
+              ></textarea>
 
-            <section class="sync-script" id="sync-script" aria-labelledby="sync-script-title" hidden>
-              <div class="sync-script__heading">
-                <h4 id="sync-script-title">音声同期スクリプト</h4>
-                <p>再生中は現在の単語を強調します。再生中に単語を選ぶとその位置へ移動し、停止中なら単語訳を表示します。</p>
+              <section class="sync-script" id="sync-script" aria-labelledby="sync-script-title" hidden>
+                <div class="sync-script__heading">
+                  <h4 id="sync-script-title">音声同期スクリプト</h4>
+                  <p>現在の英文を自動で追いかけます。単語を選ぶと、再生中はその位置へ移動し、停止中は単語訳を表示します。</p>
+                </div>
+                <div class="sync-transcript" id="sync-transcript" aria-label="単語を選択できる英語スクリプト"></div>
+                <p class="sync-script__note">単語位置は音声認識による推定値のため、無音部分では多少ずれることがあります。</p>
+              </section>
+
+              <div class="transcript-actions">
+                <button class="control control--quiet" id="save-transcript-button" type="button" disabled>修正を保存</button>
+                <button class="control control--text" id="delete-transcript-button" type="button" disabled>保存内容を削除</button>
               </div>
-              <div class="sync-transcript" id="sync-transcript" aria-label="単語を選択できる英語スクリプト"></div>
-              <p class="sync-script__note">単語位置は音声認識による推定値のため、無音部分では多少ずれることがあります。</p>
-            </section>
+              <p class="transcript-status" id="transcript-status" aria-live="polite">
+                初回生成時は約100MBの英語認識モデルを取得します。Wi-Fiでの利用をおすすめします。
+              </p>
+            </div>
 
             <section class="translation-panel" id="translation-panel" aria-labelledby="translation-title" hidden>
               <div class="translation-panel__heading">
@@ -225,14 +278,6 @@
               <p class="translation-output" id="translation-output"></p>
               <p class="translation-status" id="translation-status" aria-live="polite"></p>
             </section>
-
-            <div class="transcript-actions">
-              <button class="control control--quiet" id="save-transcript-button" type="button" disabled>修正を保存</button>
-              <button class="control control--text" id="delete-transcript-button" type="button" disabled>保存内容を削除</button>
-            </div>
-            <p class="transcript-status" id="transcript-status" aria-live="polite">
-              初回生成時は約100MBの英語認識モデルを取得します。Wi-Fiでの利用をおすすめします。
-            </p>
           </section>
 
           <dialog class="word-dialog" id="word-dialog" aria-labelledby="word-dialog-title">
