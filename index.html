@@ -96,20 +96,59 @@
             </button>
           </div>
 
-          <section class="setting-summary" aria-labelledby="playback-settings-title">
-            <div>
-              <h3 id="playback-settings-title">再生設定</h3>
-              <p class="setting-summary__status" id="playback-settings-status" aria-live="polite">1.00×・順番に次の音声へ</p>
-            </div>
+          <section class="learning-settings" aria-label="学習設定">
             <button
-              class="control control--quiet setting-summary__button"
+              class="control control--quiet setting-chip"
+              id="playback-rate-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+            >
+              <span id="playback-rate-status">1.00×</span>
+            </button>
+            <button
+              class="control control--quiet setting-chip"
               id="playback-settings-button"
               type="button"
               aria-haspopup="dialog"
             >
-              設定
+              <span id="playback-settings-status" aria-live="polite">順番に次へ</span>
+            </button>
+            <button
+              class="control control--quiet setting-chip"
+              id="transcript-display-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+            >
+              <span id="transcript-display-status" aria-live="polite">スクリプト表示・1回目から</span>
+            </button>
+            <button
+              class="control control--quiet setting-chip"
+              id="practice-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+            >
+              <span id="practice-settings-status">手動で次へ</span>
+            </button>
+            <button
+              class="control control--quiet setting-chip"
+              id="loop-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+            >
+              <span id="loop-status" aria-live="polite">区間リピートOFF</span>
+            </button>
+            <button
+              class="control control--quiet setting-chip"
+              id="transcript-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+            >
+              英語スクリプト / 日本語訳
             </button>
           </section>
+          <p class="visually-hidden" id="practice-status" aria-live="polite">
+            ファイル終了後、再生ボタンを押すまで次の音声を待ちます。
+          </p>
 
           <dialog class="word-dialog settings-dialog" id="playback-settings-dialog" aria-labelledby="playback-dialog-title" tabindex="-1">
             <div class="word-dialog__inner">
@@ -151,23 +190,6 @@
             </div>
           </dialog>
 
-          <section class="setting-summary" aria-labelledby="practice-title">
-            <div>
-              <h3 id="practice-title">リピーティング用の自動ポーズ</h3>
-              <p class="practice-status setting-summary__status" id="practice-status" aria-live="polite">
-                ファイル終了後、再生ボタンを押すまで次の音声を待ちます。
-              </p>
-            </div>
-            <button
-              class="control control--quiet setting-summary__button"
-              id="practice-settings-button"
-              type="button"
-              aria-haspopup="dialog"
-            >
-              設定
-            </button>
-          </section>
-
           <dialog class="word-dialog settings-dialog" id="practice-settings-dialog" aria-labelledby="practice-settings-title" tabindex="-1">
             <div class="word-dialog__inner">
               <p class="word-dialog__label">リピーティング設定</p>
@@ -198,21 +220,6 @@
             </div>
           </dialog>
 
-          <section class="setting-summary" aria-labelledby="loop-title">
-            <div>
-              <h3 id="loop-title">A–Bリピート</h3>
-              <p class="setting-summary__status" id="loop-status" aria-live="polite">区間は未設定です。</p>
-            </div>
-            <button
-              class="control control--quiet setting-summary__button"
-              id="loop-settings-button"
-              type="button"
-              aria-haspopup="dialog"
-            >
-              設定
-            </button>
-          </section>
-
           <dialog class="word-dialog settings-dialog" id="loop-settings-dialog" aria-labelledby="loop-settings-title" tabindex="-1">
             <div class="word-dialog__inner">
               <p class="word-dialog__label">区間設定</p>
@@ -239,19 +246,6 @@
           </dialog>
 
           <section class="transcript-panel" aria-label="英語スクリプトと日本語訳">
-            <button
-              class="control transcript-settings-trigger"
-              id="transcript-settings-button"
-              type="button"
-              aria-haspopup="dialog"
-            >
-              <span class="transcript-settings-trigger__copy">
-                <strong>英語スクリプト / 日本語訳</strong>
-                <span id="transcript-display-status" aria-live="polite">表示：1回目以降</span>
-              </span>
-              <span class="transcript-settings-trigger__action">設定</span>
-            </button>
-
             <dialog class="word-dialog settings-dialog" id="transcript-settings-dialog" aria-labelledby="transcript-settings-title" tabindex="-1">
               <div class="word-dialog__inner">
                 <p class="word-dialog__label">スクリプト設定</p>

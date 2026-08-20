@@ -376,31 +376,20 @@ h3 {
   transform: translate(-50%, -42%);
 }
 
-.setting-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.learning-settings {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-md);
+  gap: var(--space-xs);
   padding-block: var(--space-lg);
   border-block-start: var(--rule-thin) solid var(--color-rule);
 }
 
-.setting-summary h3 {
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.setting-summary__status {
-  margin-block-start: var(--space-xs);
-  color: var(--color-muted);
+.setting-chip {
+  min-height: var(--size-touch);
+  padding-inline: var(--space-sm);
   font-size: var(--text-sm);
-}
-
-.setting-summary__button {
-  align-self: center;
-  white-space: nowrap;
+  font-weight: 700;
 }
 
 .settings-fields {
@@ -425,73 +414,22 @@ h3 {
   color: var(--color-accent);
 }
 
-.practice-status {
-  min-height: 1.6em;
-  padding-inline-start: var(--space-sm);
-  border-inline-start: var(--rule-strong) solid var(--color-rule-strong);
-}
-
-.practice-status[data-state="paused"] {
-  border-inline-start-color: var(--color-accent);
-  color: var(--color-ink);
-  font-weight: 700;
-}
-
 .transcript-panel {
-  display: grid;
-  gap: var(--space-md);
-  padding-block-start: var(--space-lg);
-  margin-block-start: var(--space-lg);
-  border-block-start: var(--rule-thin) solid var(--color-rule);
+  display: block;
 }
 
 .transcript-content {
   display: grid;
   gap: var(--space-lg);
+  padding-block-start: var(--space-lg);
+  margin-block-start: var(--space-lg);
+  border-block-start: var(--rule-thin) solid var(--color-rule);
 }
 
-.transcript-settings-trigger {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  width: 100%;
-  padding: var(--space-md);
-  text-align: start;
-}
-
-.transcript-settings-trigger__copy {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-xs);
-}
-
-.transcript-settings-trigger strong {
-  font-family: var(--font-display);
-  font-size: var(--text-base);
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.transcript-settings-trigger__copy > span,
 .transcript-status {
   color: var(--color-muted);
   font-size: var(--text-xs);
   line-height: 1.4;
-}
-
-.transcript-settings-trigger__copy > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.transcript-settings-trigger__action {
-  color: var(--color-muted);
-  font-family: var(--font-body);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  white-space: nowrap;
 }
 
 .transcript-output {

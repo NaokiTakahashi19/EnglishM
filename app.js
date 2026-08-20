@@ -14,6 +14,8 @@ const rateSelect = document.querySelector("#playback-rate");
 const playbackModeSelect = document.querySelector("#playback-mode");
 const repeatCountGroup = document.querySelector("#repeat-count-group");
 const repeatCountInput = document.querySelector("#repeat-count");
+const playbackRateStatus = document.querySelector("#playback-rate-status");
+const playbackRateSettingsButton = document.querySelector("#playback-rate-settings-button");
 const playbackSettingsStatus = document.querySelector("#playback-settings-status");
 const playbackSettingsButton = document.querySelector("#playback-settings-button");
 const playbackSettingsDialog = document.querySelector("#playback-settings-dialog");
@@ -22,6 +24,7 @@ const manualNextModeButton = document.querySelector("#manual-next-mode-button");
 const autoNextModeButton = document.querySelector("#auto-next-mode-button");
 const pauseRatioSelect = document.querySelector("#pause-ratio");
 const practiceStatus = document.querySelector("#practice-status");
+const practiceSettingsStatus = document.querySelector("#practice-settings-status");
 const practiceSettingsButton = document.querySelector("#practice-settings-button");
 const practiceSettingsDialog = document.querySelector("#practice-settings-dialog");
 const practiceSettingsClose = document.querySelector("#practice-settings-close");
@@ -29,6 +32,7 @@ const transcribeButton = document.querySelector("#transcribe-button");
 const transcriptOutput = document.querySelector("#transcript-output");
 const transcriptContent = document.querySelector("#transcript-content");
 const transcriptDisplayStatus = document.querySelector("#transcript-display-status");
+const transcriptDisplaySettingsButton = document.querySelector("#transcript-display-settings-button");
 const transcriptSettingsButton = document.querySelector("#transcript-settings-button");
 const transcriptSettingsDialog = document.querySelector("#transcript-settings-dialog");
 const transcriptSettingsClose = document.querySelector("#transcript-settings-close");
@@ -197,7 +201,6 @@ function shouldShowTranscript(transcriptVisible, hasTrack, completedPlays, showF
 
 function syncTranscriptVisibility() {
   const enabled = settings.transcriptVisible !== false;
-  const currentPlayNumber = completedPlaysForCurrentTrack + 1;
   const hasTrack = currentIndex >= 0;
   const visible = shouldShowTranscript(enabled, hasTrack, completedPlaysForCurrentTrack, settings.transcriptShowFrom);
   transcriptContent.hidden = !visible;
@@ -207,15 +210,13 @@ function syncTranscriptVisibility() {
   transcriptShowFromInput.disabled = !enabled;
 
   if (!enabled) {
-    transcriptDisplayStatus.textContent = "非表示";
+    transcriptDisplayStatus.textContent = "スクリプト非表示";
   } else if (settings.playbackMode === "sequence" && settings.transcriptShowFrom > 1) {
-    transcriptDisplayStatus.textContent = `表示：${settings.transcriptShowFrom}回目以降・繰り返しなし`;
+    transcriptDisplayStatus.textContent = `スクリプト表示・${settings.transcriptShowFrom}回目から・要確認`;
   } else if (settings.playbackMode === "count" && settings.transcriptShowFrom > settings.repeatCount) {
-    transcriptDisplayStatus.textContent = `表示：${settings.transcriptShowFrom}回目以降・再生${settings.repeatCount}回`;
-  } else if (hasTrack && !visible) {
-    transcriptDisplayStatus.textContent = `表示：${settings.transcriptShowFrom}回目以降・現在${currentPlayNumber}回目`;
+    transcriptDisplayStatus.textContent = `スクリプト表示・${settings.transcriptShowFrom}回目から・要確認`;
   } else {
-    transcriptDisplayStatus.textContent = `表示：${settings.transcriptShowFrom}回目以降`;
+    transcriptDisplayStatus.textContent = `スクリプト表示・${settings.transcriptShowFrom}回目から`;
   }
 
   if (visible && activeSyncWordIndex >= 0) {
@@ -512,13 +513,14 @@ function syncControls() {
 
 function syncPlaybackSettingsUi() {
   const rateLabel = rateSelect.selectedOptions[0]?.textContent || `${settings.rate.toFixed(2)}×`;
-  let modeLabel = "順番に次の音声へ";
+  let modeLabel = "順番に次へ";
   if (settings.playbackMode === "count") {
-    modeLabel = `各音声${settings.repeatCount}回 → 次へ`;
+    modeLabel = `回数を決めて次へ・${settings.repeatCount}回`;
   } else if (settings.playbackMode === "infinite") {
-    modeLabel = "同じ音声を無限リピート";
+    modeLabel = "1曲を無限リピート";
   }
-  playbackSettingsStatus.textContent = `${rateLabel}・${modeLabel}`;
+  playbackRateStatus.textContent = rateLabel;
+  playbackSettingsStatus.textContent = modeLabel;
   syncTranscriptVisibility();
 }
 
@@ -527,6 +529,9 @@ function syncPracticeUi() {
   manualNextModeButton.setAttribute("aria-pressed", String(mode === "manual"));
   autoNextModeButton.setAttribute("aria-pressed", String(mode === "auto"));
   pauseRatioSelect.disabled = mode !== "auto";
+  practiceSettingsStatus.textContent = mode === "auto"
+    ? `待って自動再生・${settings.pauseRatio}倍`
+    : "手動で次へ";
 
   if (isPracticePause) {
     practiceStatus.dataset.state = "paused";
@@ -1160,14 +1165,12 @@ function syncLoopUi() {
   const enabled = validLoop(loop) && loop.enabled === true;
   loopToggleButton.setAttribute("aria-pressed", String(enabled));
   loopToggleButton.textContent = `区間リピート：${enabled ? "入" : "切"}`;
-  if (!currentTrack()) {
-    loopStatus.textContent = "音声を選ぶと区間を設定できます。";
-  } else if (validLoop(loop)) {
-    loopStatus.textContent = `A ${formatTime(loop.a)} 〜 B ${formatTime(loop.b)}・${enabled ? "リピート中" : "停止中"}`;
+  if (validLoop(loop)) {
+    loopStatus.textContent = `区間リピート${enabled ? "ON" : "OFF"}`;
   } else if (Number.isFinite(loop.a) || Number.isFinite(loop.b)) {
-    loopStatus.textContent = `A ${Number.isFinite(loop.a) ? formatTime(loop.a) : "—"}・B ${Number.isFinite(loop.b) ? formatTime(loop.b) : "—"}（区間未完成）`;
+    loopStatus.textContent = "区間リピート・設定中";
   } else {
-    loopStatus.textContent = "区間は未設定です。";
+    loopStatus.textContent = "区間リピートOFF";
   }
   syncControls();
 }
@@ -1338,7 +1341,8 @@ practiceSettingsButton.addEventListener("click", () => {
   const selectedModeButton = settings.practiceMode === "auto" ? autoNextModeButton : manualNextModeButton;
   openSettingsDialog(practiceSettingsDialog, selectedModeButton);
 });
-playbackSettingsButton.addEventListener("click", () => openSettingsDialog(playbackSettingsDialog, rateSelect));
+playbackRateSettingsButton.addEventListener("click", () => openSettingsDialog(playbackSettingsDialog, rateSelect));
+playbackSettingsButton.addEventListener("click", () => openSettingsDialog(playbackSettingsDialog, playbackModeSelect));
 playbackSettingsClose.addEventListener("click", () => playbackSettingsDialog.close());
 practiceSettingsClose.addEventListener("click", () => practiceSettingsDialog.close());
 loopSettingsButton.addEventListener("click", () => openSettingsDialog(loopSettingsDialog, setAButton));
@@ -1381,7 +1385,11 @@ translationSettingsForm.addEventListener("submit", (event) => {
     startTranslation(activeTranscriptRecord, true);
   }
 });
-transcriptSettingsButton.addEventListener("click", () => openSettingsDialog(transcriptSettingsDialog, transcriptDisplayModeSelect));
+transcriptDisplaySettingsButton.addEventListener("click", () => openSettingsDialog(transcriptSettingsDialog, transcriptDisplayModeSelect));
+transcriptSettingsButton.addEventListener("click", () => {
+  const firstContentAction = transcribeButton.disabled ? translationSettingsButton : transcribeButton;
+  openSettingsDialog(transcriptSettingsDialog, firstContentAction);
+});
 transcriptSettingsClose.addEventListener("click", () => transcriptSettingsDialog.close());
 closeSettingsOnBackdrop(transcriptSettingsDialog);
 transcriptDisplayModeSelect.addEventListener("change", () => {
