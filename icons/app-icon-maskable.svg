@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Listening Desk maskable icon</title>
+  <rect width="512" height="512" fill="#f4efe4"/>
+  <path d="M112 256h50l30-90 48 184 48-142 42 98 28-50h42" fill="none" stroke="#281f18" stroke-width="26" stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M384 112v64h-64" fill="none" stroke="#c65324" stroke-width="22"/>
+</svg>

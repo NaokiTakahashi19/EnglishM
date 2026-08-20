@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Listening Desk</title>
+  <rect width="512" height="512" rx="72" fill="#f4efe4"/>
+  <path d="M96 256h54l34-104 54 208 54-160 48 112 30-56h46" fill="none" stroke="#281f18" stroke-width="28" stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M416 96v74h-74" fill="none" stroke="#c65324" stroke-width="24"/>
+</svg>

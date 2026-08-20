@@ -1,0 +1,63 @@
+/* Hallmark · tokens: Almanac · paper-band: light · display: roman-serif · accent: warm */
+:root {
+  --color-paper: oklch(96.5% 0.014 82);
+  --color-paper-2: oklch(93.5% 0.016 82);
+  --color-paper-3: oklch(90% 0.018 82);
+  --color-ink: oklch(20% 0.018 62);
+  --color-ink-2: oklch(31% 0.018 62);
+  --color-muted: oklch(42% 0.018 70);
+  --color-rule: oklch(75% 0.018 78);
+  --color-rule-strong: oklch(54% 0.02 72);
+  --color-accent: oklch(54% 0.16 48);
+  --color-accent-ink: oklch(98% 0.008 82);
+  --color-focus: oklch(42% 0.15 48);
+  --color-error: oklch(48% 0.18 24);
+  --color-success: oklch(42% 0.1 145);
+  --color-overlay: oklch(20% 0.018 62 / 0.08);
+
+  --font-display: "Newsreader", "Iowan Old Style", "Palatino Linotype", serif;
+  --font-body: "IBM Plex Sans", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-outlier: "IBM Plex Mono", "SFMono-Regular", monospace;
+
+  --space-3xs: 0.125rem;
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+  --space-2xl: 4rem;
+  --space-3xl: 6rem;
+  --space-4xl: 9rem;
+
+  --text-xs: 0.72rem;
+  --text-sm: 0.82rem;
+  --text-base: 1rem;
+  --text-md: 1.25rem;
+  --text-lg: 1.5625rem;
+  --text-xl: 1.953rem;
+  --text-2xl: 2.441rem;
+  --text-display: clamp(2.55rem, 6vw + 0.8rem, 5rem);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 100ms;
+  --dur-short: 180ms;
+  --dur-long: 360ms;
+
+  --rule-thin: 1px;
+  --rule-strong: 2px;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-round: 999rem;
+
+  --size-touch: 2.75rem;
+  --page-gutter: clamp(1rem, 4vw, 3rem);
+  --content-max: 78rem;
+
+  --z-base: 1;
+  --z-raised: 10;
+  --z-sticky: 200;
+  --z-toast: 500;
+}
