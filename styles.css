@@ -226,6 +226,8 @@ h3 {
 }
 
 .workbench {
+  display: flex;
+  flex-direction: column;
   border-block: var(--rule-thin) solid var(--color-rule-strong);
 }
 
@@ -789,9 +791,10 @@ h3 {
 }
 
 .library-pane {
+  order: -1;
   min-width: 0;
   padding-block: var(--space-xl);
-  border-block-start: var(--rule-thin) solid var(--color-rule-strong);
+  border-block-end: var(--rule-thin) solid var(--color-rule-strong);
 }
 
 .library-heading {
@@ -1140,8 +1143,10 @@ h3 {
   }
 
   .library-pane {
+    order: 0;
     padding-block: var(--space-2xl);
     padding-inline-start: var(--space-xl);
+    border-block-end: 0;
     border-block-start: 0;
     border-inline-start: var(--rule-thin) solid var(--color-rule-strong);
   }
