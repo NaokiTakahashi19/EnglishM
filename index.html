@@ -196,7 +196,10 @@
                 <h3 id="transcript-title">英語スクリプト</h3>
                 <p>英文と単語時刻は端末内で生成します。日本語訳はOpenAI APIで生成し、このブラウザへ保存します。</p>
               </div>
-              <button class="control control--quiet" id="transcribe-button" type="button" disabled>音声から生成</button>
+              <div class="transcript-panel__actions">
+                <button class="control control--text" id="translation-settings-button" type="button">API設定</button>
+                <button class="control control--quiet" id="transcribe-button" type="button" disabled>音声から生成</button>
+              </div>
             </div>
 
             <label class="visually-hidden" for="transcript-output">生成または編集した英語スクリプト</label>
@@ -221,7 +224,6 @@
               <div class="translation-panel__heading">
                 <h4 id="translation-title">日本語訳</h4>
                 <div class="translation-panel__actions">
-                  <button class="control control--text" id="translation-settings-button" type="button">API設定</button>
                   <button class="control control--text" id="translate-button" type="button">日本語訳を生成</button>
                 </div>
               </div>
