@@ -80,6 +80,8 @@ const wordDialog = document.querySelector("#word-dialog");
 const wordDialogTitle = document.querySelector("#word-dialog-title");
 const wordDialogTranslation = document.querySelector("#word-dialog-translation");
 const playWordButton = document.querySelector("#play-word-button");
+const setWordAButton = document.querySelector("#set-word-a-button");
+const setWordBButton = document.querySelector("#set-word-b-button");
 const setAButton = document.querySelector("#set-a-button");
 const setBButton = document.querySelector("#set-b-button");
 const clearLoopButton = document.querySelector("#clear-loop-button");
@@ -838,13 +840,16 @@ function renderSynchronizedTranscript(words) {
     button.type = "button";
     button.textContent = word.text;
     button.dataset.start = String(word.start);
+    button.dataset.index = String(index);
     if (Number.isFinite(word.end)) button.dataset.end = String(word.end);
-    button.setAttribute("aria-label", `${word.text}、${formatTime(word.start)}から`);
-    button.addEventListener("click", () => handleSynchronizedWord(word, button));
+    button.dataset.baseAriaLabel = `${word.text}、${formatTime(word.start)}から`;
+    button.setAttribute("aria-label", button.dataset.baseAriaLabel);
+    button.addEventListener("click", () => handleSynchronizedWord(word, index));
     syncWordButtons.push(button);
     syncTranscript.append(button);
   });
   renderCurrentTranslation();
+  syncWordLoopRange();
   updateTranscriptHighlight();
 }
 
@@ -928,6 +933,59 @@ function updateTranscriptHighlight() {
   }
 }
 
+function timedWordEnd(words, index) {
+  const word = words[index];
+  if (!word) return Number.NaN;
+  if (Number.isFinite(word.end) && word.end > word.start) return word.end;
+  const nextStart = words[index + 1]?.start;
+  if (Number.isFinite(nextStart) && nextStart > word.start) return nextStart;
+  if (Number.isFinite(audio.duration) && audio.duration > word.start) return audio.duration;
+  return word.start + 0.4;
+}
+
+function syncWordLoopRange() {
+  const words = normalizeTimedWords(activeTranscriptRecord?.words);
+  const loop = currentLoop();
+  const hasRange = validLoop(loop);
+  const epsilon = 0.03;
+
+  syncWordButtons.forEach((button, index) => {
+    const word = words[index];
+    const start = word?.start;
+    const end = timedWordEnd(words, index);
+    const marksStart = Number.isFinite(loop.a)
+      && Number.isFinite(start)
+      && Number.isFinite(end)
+      && loop.a >= start - epsilon
+      && loop.a < end - epsilon;
+    const marksEnd = Number.isFinite(loop.b)
+      && Number.isFinite(start)
+      && Number.isFinite(end)
+      && loop.b > start + epsilon
+      && loop.b <= end + epsilon;
+    const inRange = hasRange
+      && Number.isFinite(start)
+      && Number.isFinite(end)
+      && start < loop.b - epsilon
+      && end > loop.a + epsilon;
+
+    if (marksStart) button.dataset.loopStart = "true";
+    else delete button.dataset.loopStart;
+    if (marksEnd) button.dataset.loopEnd = "true";
+    else delete button.dataset.loopEnd;
+    if (inRange) button.dataset.loopRange = "true";
+    else delete button.dataset.loopRange;
+
+    const boundaryLabels = [];
+    if (marksStart) boundaryLabels.push("区間の開始");
+    if (marksEnd) boundaryLabels.push("区間の終了");
+    const baseLabel = button.dataset.baseAriaLabel || button.textContent;
+    button.setAttribute("aria-label", boundaryLabels.length > 0
+      ? `${baseLabel}、${boundaryLabels.join("、")}`
+      : baseLabel);
+  });
+}
+
 function keepActiveWordVisible(activeButton) {
   if (!activeButton || syncTranscript.clientHeight === 0) return;
   const containerRect = syncTranscript.getBoundingClientRect();
@@ -949,7 +1007,7 @@ function openWordDialog() {
   }
 }
 
-function handleSynchronizedWord(word) {
+function handleSynchronizedWord(word, index) {
   if (!audio.paused) {
     cancelPracticePause();
     audio.currentTime = Math.max(0, word.start);
@@ -958,7 +1016,7 @@ function handleSynchronizedWord(word) {
   }
 
   const key = wordCacheKey(word.text);
-  selectedWord = { ...word, key, trackId: currentTrack()?.id };
+  selectedWord = { ...word, index, key, trackId: currentTrack()?.id };
   wordDialogTitle.textContent = word.text;
   const cachedTranslation = activeTranscriptRecord?.wordTranslations?.[key];
   wordDialogTranslation.textContent = cachedTranslation || "翻訳を準備しています。";
@@ -1454,10 +1512,15 @@ function validLoop(loop) {
   return Number.isFinite(loop.a) && Number.isFinite(loop.b) && loop.b > loop.a + 0.2;
 }
 
+function loopPointText(label, seconds) {
+  const word = String(label || "").trim();
+  return word ? `${word} · ${formatTime(seconds)}` : formatTime(seconds);
+}
+
 function syncLoopUi() {
   const loop = currentLoop();
-  pointALabel.textContent = Number.isFinite(loop.a) ? formatTime(loop.a) : "—";
-  pointBLabel.textContent = Number.isFinite(loop.b) ? formatTime(loop.b) : "—";
+  pointALabel.textContent = Number.isFinite(loop.a) ? loopPointText(loop.aLabel, loop.a) : "—";
+  pointBLabel.textContent = Number.isFinite(loop.b) ? loopPointText(loop.bLabel, loop.b) : "—";
   setAButton.dataset.set = String(Number.isFinite(loop.a));
   setBButton.dataset.set = String(Number.isFinite(loop.b));
   const enabled = validLoop(loop) && loop.enabled === true;
@@ -1470,6 +1533,7 @@ function syncLoopUi() {
   } else {
     loopStatus.textContent = "区間リピートOFF";
   }
+  syncWordLoopRange();
   syncControls();
 }
 
@@ -1484,13 +1548,58 @@ function setLoopPoint(point) {
   }
 
   loop[point] = audio.currentTime;
+  delete loop[`${point}Label`];
   if (point === "a" && Number.isFinite(loop.b) && loop.b <= loop.a + 0.2) {
     delete loop.b;
+    delete loop.bLabel;
     loop.enabled = false;
   }
   loops[track.id] = loop;
   writeStored(LOOPS_KEY, loops);
   syncLoopUi();
+}
+
+function setLoopPointFromWord(point) {
+  const track = currentTrack();
+  if (!track || !selectedWord || selectedWord.trackId !== track.id) return;
+  const words = normalizeTimedWords(activeTranscriptRecord?.words);
+  const wordIndex = Number.isInteger(selectedWord.index)
+    ? selectedWord.index
+    : words.findIndex((word) => word.start === selectedWord.start && word.text === selectedWord.text);
+  const boundary = point === "a" ? selectedWord.start : timedWordEnd(words, wordIndex);
+  if (!Number.isFinite(boundary)) {
+    showStatus("この単語の位置を取得できませんでした。", "error");
+    return;
+  }
+
+  const loop = loops[track.id] || {};
+  if (point === "b" && Number.isFinite(loop.a) && boundary <= loop.a + 0.2) {
+    showStatus("終了の単語は、開始の単語より後ろを選んでください。", "error");
+    return;
+  }
+
+  loop[point] = boundary;
+  loop[`${point}Label`] = selectedWord.text;
+  if (point === "a" && Number.isFinite(loop.b) && loop.b <= loop.a + 0.2) {
+    delete loop.b;
+    delete loop.bLabel;
+  }
+  loop.enabled = validLoop(loop);
+  loops[track.id] = loop;
+  writeStored(LOOPS_KEY, loops);
+  if (loop.enabled) {
+    audio.currentTime = loop.a;
+    updateTimeline();
+  }
+  syncLoopUi();
+
+  if (point === "a") {
+    showStatus(`「${selectedWord.text}」から区間を開始します。続けて終了の単語を選べます。`);
+  } else if (loop.enabled) {
+    showStatus(`「${selectedWord.text}」までを区間に設定し、リピートを開始しました。`);
+  } else {
+    showStatus(`「${selectedWord.text}」を区間の終了に設定しました。開始の単語も選んでください。`);
+  }
 }
 
 function clearLoop() {
@@ -1824,6 +1933,9 @@ playWordButton.addEventListener("click", async () => {
     showStatus("この位置から再生できませんでした。再生ボタンを押してください。", "error");
   }
 });
+
+setWordAButton.addEventListener("click", () => setLoopPointFromWord("a"));
+setWordBButton.addEventListener("click", () => setLoopPointFromWord("b"));
 
 wordDialog.addEventListener("close", () => {
   selectedWord = null;

@@ -230,7 +230,7 @@
             <div class="word-dialog__inner">
               <p class="word-dialog__label">区間設定</p>
               <h3 id="loop-settings-title">A–Bリピート</h3>
-              <p class="settings-dialog__note">再生中の位置をA点・B点として記録し、その区間だけを繰り返します。</p>
+              <p class="settings-dialog__note">再生位置から設定するか、停止中に英文の単語を選び、「この単語から」「この単語まで」で区間を指定できます。</p>
               <div class="loop-points">
                 <button class="loop-point" id="set-a-button" type="button" disabled>
                   <span>A点</span>
@@ -357,6 +357,8 @@
               <h3 id="word-dialog-title">—</h3>
               <p class="word-dialog__translation" id="word-dialog-translation" aria-live="polite">翻訳を準備しています。</p>
               <div class="word-dialog__actions">
+                <button class="control control--quiet" id="set-word-a-button" type="button">この単語から</button>
+                <button class="control control--quiet" id="set-word-b-button" type="button">この単語まで</button>
                 <button class="control control--quiet" id="play-word-button" type="button">この位置から再生</button>
                 <button class="control control--text" value="close">閉じる</button>
               </div>
