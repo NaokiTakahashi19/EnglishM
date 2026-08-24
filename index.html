@@ -291,15 +291,6 @@
             </dialog>
 
             <div class="transcript-content" id="transcript-content">
-              <label class="visually-hidden" for="transcript-output">生成または編集した英語スクリプト</label>
-              <textarea
-                class="transcript-output"
-                id="transcript-output"
-                rows="8"
-                placeholder="音声を選び「音声から生成」を押すと、英文がここに表示されます。"
-                disabled
-              ></textarea>
-
               <section class="sync-script" id="sync-script" aria-labelledby="sync-script-title" hidden>
                 <div class="sync-script__heading">
                   <h4 id="sync-script-title">音声同期スクリプト</h4>
@@ -308,6 +299,22 @@
                 <div class="sync-transcript" id="sync-transcript" aria-label="単語を選択できる英語スクリプト"></div>
                 <p class="sync-script__note">単語位置は音声認識による推定値のため、無音部分では多少ずれることがあります。</p>
               </section>
+            </div>
+
+            <dialog class="word-dialog transcript-workspace-dialog" id="transcript-workspace-dialog" aria-labelledby="transcript-workspace-title" tabindex="-1">
+              <div class="word-dialog__inner">
+                <p class="word-dialog__label">英語スクリプト / 日本語訳</p>
+                <h3 id="transcript-workspace-title">表示・編集</h3>
+                <p class="settings-dialog__note">英文の確認・修正・保存と、日本語訳の生成をこの画面で行います。</p>
+
+                <label class="visually-hidden" for="transcript-output">生成または編集した英語スクリプト</label>
+                <textarea
+                  class="transcript-output"
+                  id="transcript-output"
+                  rows="8"
+                  placeholder="音声を選び「音声から生成」を押すと、英文がここに表示されます。"
+                  disabled
+                ></textarea>
 
               <div class="transcript-actions">
                 <button class="control control--quiet" id="save-transcript-button" type="button" disabled>修正を保存</button>
@@ -326,7 +333,11 @@
                 <p class="translation-output" id="translation-output"></p>
                 <p class="translation-status" id="translation-status" aria-live="polite"></p>
               </section>
-            </div>
+                <div class="word-dialog__actions transcript-workspace-dialog__footer">
+                  <button class="control control--primary" id="transcript-workspace-close" type="button">閉じる</button>
+                </div>
+              </div>
+            </dialog>
           </section>
 
           <dialog class="word-dialog" id="word-dialog" aria-labelledby="word-dialog-title">
@@ -348,12 +359,37 @@
               <p class="translation-settings-dialog__note">
                 OpenAI APIキーではなく、管理者がサーバーに設定した専用アクセスキーです。英文生成と日本語訳の両方に使い、このブラウザだけに保存します。
               </p>
-              <label class="field-group" for="translation-access-key">
-                <span>アクセスキー</span>
-                <input class="field-control" id="translation-access-key" type="password" autocomplete="off" required />
-              </label>
+              <div class="field-group">
+                <label for="translation-access-key">アクセスキー</label>
+                <div class="secret-field">
+                  <input
+                    class="field-control"
+                    id="translation-access-key"
+                    type="password"
+                    autocomplete="off"
+                    aria-describedby="translation-settings-status"
+                    required
+                  />
+                  <button
+                    class="secret-toggle"
+                    id="translation-access-key-toggle"
+                    type="button"
+                    aria-label="アクセスキーを表示"
+                    aria-pressed="false"
+                  >
+                    <svg class="icon secret-toggle__show" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                      <circle cx="12" cy="12" r="2.75" />
+                    </svg>
+                    <svg class="icon secret-toggle__hide" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m4 4 16 16M9.9 6.3A10.7 10.7 0 0 1 12 6c6 0 9.5 6 9.5 6a14.7 14.7 0 0 1-2.2 3M6.2 7.2C3.9 9 2.5 12 2.5 12s3.5 6 9.5 6a10.7 10.7 0 0 0 2.2-.2M10.1 10.1a2.75 2.75 0 0 0 3.8 3.8" />
+                    </svg>
+                  </button>
+                </div>
+                <p class="translation-settings-status" id="translation-settings-status" aria-live="polite"></p>
+              </div>
               <div class="word-dialog__actions">
-                <button class="control control--primary" type="submit">保存</button>
+                <button class="control control--primary" id="translation-settings-submit" type="submit">接続確認して保存</button>
                 <button class="control control--text" id="translation-settings-close" type="button">閉じる</button>
               </div>
             </form>

@@ -48,6 +48,8 @@ const transcriptDisplayClose = document.querySelector("#transcript-display-close
 const transcriptSettingsButton = document.querySelector("#transcript-settings-button");
 const transcriptSettingsDialog = document.querySelector("#transcript-settings-dialog");
 const transcriptSettingsClose = document.querySelector("#transcript-settings-close");
+const transcriptWorkspaceDialog = document.querySelector("#transcript-workspace-dialog");
+const transcriptWorkspaceClose = document.querySelector("#transcript-workspace-close");
 const transcriptDisplayModeSelect = document.querySelector("#transcript-display-mode");
 const transcriptShowFromGroup = document.querySelector("#transcript-show-from-group");
 const transcriptShowFromInput = document.querySelector("#transcript-show-from");
@@ -65,6 +67,9 @@ const translationSettingsDialog = document.querySelector("#translation-settings-
 const translationSettingsForm = document.querySelector("#translation-settings-form");
 const translationSettingsClose = document.querySelector("#translation-settings-close");
 const translationAccessKeyInput = document.querySelector("#translation-access-key");
+const translationAccessKeyToggle = document.querySelector("#translation-access-key-toggle");
+const translationSettingsStatus = document.querySelector("#translation-settings-status");
+const translationSettingsSubmit = document.querySelector("#translation-settings-submit");
 const wordDialog = document.querySelector("#word-dialog");
 const wordDialogTitle = document.querySelector("#word-dialog-title");
 const wordDialogTranslation = document.querySelector("#word-dialog-translation");
@@ -183,14 +188,55 @@ function getTranslationAccessKey() {
   }
 }
 
+function setTranslationAccessKeyVisibility(visible) {
+  translationAccessKeyInput.type = visible ? "text" : "password";
+  translationAccessKeyToggle.setAttribute("aria-pressed", String(visible));
+  translationAccessKeyToggle.setAttribute(
+    "aria-label",
+    visible ? "アクセスキーを隠す" : "アクセスキーを表示",
+  );
+}
+
+function setTranslationSettingsMessage(message = "", state = "") {
+  translationSettingsStatus.textContent = message;
+  if (state) translationSettingsStatus.dataset.state = state;
+  else delete translationSettingsStatus.dataset.state;
+}
+
 function openTranslationSettings() {
   translationAccessKeyInput.value = getTranslationAccessKey();
+  translationAccessKeyInput.removeAttribute("aria-invalid");
+  delete translationAccessKeyInput.dataset.state;
+  setTranslationAccessKeyVisibility(false);
+  setTranslationSettingsMessage();
   if (typeof translationSettingsDialog.showModal === "function") {
     if (!translationSettingsDialog.open) translationSettingsDialog.showModal();
   } else {
     translationSettingsDialog.setAttribute("open", "");
   }
   window.setTimeout(() => translationAccessKeyInput.focus(), 0);
+}
+
+async function validateTranslationAccessKey(accessKey) {
+  const response = await fetch(TRANSLATION_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Translation-Key": accessKey,
+    },
+    body: JSON.stringify({ type: "validate" }),
+  });
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch {
+    payload = {};
+  }
+  if (!response.ok) {
+    const error = new Error(payload.error || "Access key validation failed");
+    error.status = response.status;
+    throw error;
+  }
 }
 
 function openSettingsDialog(dialog, preferredFocus) {
@@ -245,16 +291,9 @@ function syncTranscriptVisibility() {
 function revealTranscriptWorkspace({ focusEditor = false } = {}) {
   const track = currentTrack();
   if (!track) return;
-  transcriptEditorForcedTrackId = track.id;
-  syncTranscriptVisibility();
   if (transcriptSettingsDialog.open) transcriptSettingsDialog.close();
-  window.requestAnimationFrame(() => {
-    transcriptContent.scrollIntoView({
-      block: "start",
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-    });
-    if (focusEditor && transcriptOutput.value.trim()) transcriptOutput.focus({ preventScroll: true });
-  });
+  const preferredFocus = focusEditor && transcriptOutput.value.trim() ? transcriptOutput : transcriptWorkspaceDialog;
+  openSettingsDialog(transcriptWorkspaceDialog, preferredFocus);
 }
 
 function revealTranscriptEditor({ focus = false } = {}) {
@@ -1606,17 +1645,58 @@ translationSettingsButton.addEventListener("click", () => {
   openTranslationSettings();
 });
 translationSettingsClose.addEventListener("click", () => translationSettingsDialog.close());
-translationSettingsForm.addEventListener("submit", (event) => {
+translationAccessKeyToggle.addEventListener("click", () => {
+  setTranslationAccessKeyVisibility(translationAccessKeyInput.type === "password");
+  translationAccessKeyInput.focus({ preventScroll: true });
+});
+translationAccessKeyInput.addEventListener("input", () => {
+  translationAccessKeyInput.removeAttribute("aria-invalid");
+  delete translationAccessKeyInput.dataset.state;
+  setTranslationSettingsMessage();
+});
+translationSettingsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const accessKey = translationAccessKeyInput.value.trim();
   if (!accessKey) return;
-  try {
-    localStorage.setItem(TRANSLATION_ACCESS_KEY, accessKey);
-  } catch {
-    showStatus("共通アクセスキーをこのブラウザに保存できませんでした。", "error");
+
+  if (accessKey.startsWith("sk-proj-") || accessKey.startsWith("sk-")) {
+    translationAccessKeyInput.setAttribute("aria-invalid", "true");
+    translationAccessKeyInput.dataset.state = "error";
+    setTranslationSettingsMessage(
+      "OpenAIの秘密APIキーではありません。管理者が設定した共通アクセスキーを入力してください。",
+      "error",
+    );
     return;
   }
+
+  translationSettingsSubmit.disabled = true;
+  translationSettingsSubmit.dataset.state = "loading";
+  translationSettingsSubmit.setAttribute("aria-busy", "true");
+  setTranslationSettingsMessage("サーバーに接続して確認しています。", "loading");
+
+  try {
+    await validateTranslationAccessKey(accessKey);
+    localStorage.setItem(TRANSLATION_ACCESS_KEY, accessKey);
+    setTranslationSettingsMessage("確認できました。このブラウザに保存します。", "success");
+  } catch (error) {
+    translationAccessKeyInput.setAttribute("aria-invalid", "true");
+    translationAccessKeyInput.dataset.state = "error";
+    if (error?.status === 401) {
+      setTranslationSettingsMessage("共通アクセスキーがサーバーの設定と一致しません。", "error");
+    } else if (error?.status === 503) {
+      setTranslationSettingsMessage("翻訳サーバーの設定が完了していません。", "error");
+    } else {
+      setTranslationSettingsMessage("サーバーに接続できません。通信状態を確認してください。", "error");
+    }
+    return;
+  } finally {
+    translationSettingsSubmit.disabled = false;
+    delete translationSettingsSubmit.dataset.state;
+    translationSettingsSubmit.removeAttribute("aria-busy");
+  }
+
   translationSettingsDialog.close();
+  showStatus("共通アクセスキーを確認して保存しました。", "success");
   renderTranslation(activeTranscriptRecord?.translation || "");
   if (activeTranscriptRecord?.text && !activeTranscriptRecord.translation) {
     startTranslation(activeTranscriptRecord, true);
@@ -1630,8 +1710,10 @@ transcriptSettingsButton.addEventListener("click", () => {
   openSettingsDialog(transcriptSettingsDialog, firstContentAction);
 });
 transcriptSettingsClose.addEventListener("click", () => transcriptSettingsDialog.close());
+transcriptWorkspaceClose.addEventListener("click", () => transcriptWorkspaceDialog.close());
 transcriptDisplayClose.addEventListener("click", () => transcriptDisplayDialog.close());
 closeSettingsOnBackdrop(transcriptSettingsDialog);
+closeSettingsOnBackdrop(transcriptWorkspaceDialog);
 closeSettingsOnBackdrop(transcriptDisplayDialog);
 transcriptDisplayModeSelect.addEventListener("change", () => {
   settings.transcriptVisible = transcriptDisplayModeSelect.value === "show";

@@ -4,6 +4,8 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "https://naokitakahashi19.github.io",
   "http://localhost:4173",
   "http://127.0.0.1:4173",
+  "http://localhost:4174",
+  "http://127.0.0.1:4174",
 ];
 
 function safeEqual(left, right) {
@@ -69,6 +71,9 @@ module.exports = async function translate(req, res) {
     body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
   } catch {
     return res.status(400).json({ error: "Invalid JSON" });
+  }
+  if (body.type === "validate") {
+    return res.status(200).json({ ok: true });
   }
   const type = body.type === "word" ? "word" : "full";
   const text = String(body.text || "").trim();
