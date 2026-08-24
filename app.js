@@ -98,6 +98,9 @@ const emptyLibrary = document.querySelector("#empty-library");
 const libraryCount = document.querySelector("#library-count");
 const statusMessage = document.querySelector("#status-message");
 const connectionStatus = document.querySelector("#connection-status");
+const appInfoButton = document.querySelector("#app-info-button");
+const appInfoDialog = document.querySelector("#app-info-dialog");
+const appInfoClose = document.querySelector("#app-info-close");
 const installButton = document.querySelector("#install-button");
 const themeSettingsButton = document.querySelector("#theme-settings-button");
 const themeSettingsDialog = document.querySelector("#theme-settings-dialog");
@@ -1866,6 +1869,10 @@ if (!folderSelectionSupported) {
   chooseFolderButton.disabled = true;
   folderSupportNote.textContent = "このブラウザはフォルダ選択に対応していません。複数ファイルを選んで追加してください。";
 }
+
+appInfoButton.addEventListener("click", () => openSettingsDialog(appInfoDialog, appInfoClose));
+appInfoClose.addEventListener("click", () => appInfoDialog.close());
+closeSettingsOnBackdrop(appInfoDialog);
 
 themeSettingsButton.addEventListener("click", () => {
   const selectedTheme = themeInputs.find((input) => input.checked) || themeInputs[0];

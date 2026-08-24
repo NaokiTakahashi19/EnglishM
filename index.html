@@ -26,7 +26,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=39" />
+    <link rel="stylesheet" href="./styles.css?v=40" />
     <title>Listening Desk — 英語音声プレイヤー</title>
   </head>
   <body>
@@ -584,14 +584,42 @@
     </main>
 
     <footer class="foot-dense">
-      <p>
-        再生中の音声は端末内だけで処理します。英文生成時は音声を、日本語訳の生成時は英文または選択した単語をOpenAI APIへ送信します。設定・前回位置・英文・単語時刻・日本語訳は、このブラウザに記録します。
-        <span id="connection-status">接続状態を確認中</span>
-      </p>
+      <button class="control control--text foot-dense__info" id="app-info-button" type="button" aria-haspopup="dialog">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="8" />
+          <path d="M12 11v5M12 8h.01" />
+        </svg>
+        <span>データの扱い</span>
+      </button>
+      <span class="foot-dense__connection" id="connection-status" aria-live="polite">接続状態を確認中</span>
     </footer>
+
+    <dialog class="word-dialog settings-dialog app-info-dialog" id="app-info-dialog" aria-labelledby="app-info-title" tabindex="-1">
+      <div class="word-dialog__inner">
+        <p class="word-dialog__label">アプリについて</p>
+        <h3 id="app-info-title">データの扱い</h3>
+        <dl class="app-info-list">
+          <div>
+            <dt>端末内で処理</dt>
+            <dd>再生中の音声は、端末内だけで処理します。</dd>
+          </div>
+          <div>
+            <dt>OpenAI APIへ送信</dt>
+            <dd>英文生成時は音声を、日本語訳の生成時は英文または選択した単語を送信します。</dd>
+          </div>
+          <div>
+            <dt>このブラウザに保存</dt>
+            <dd>設定・前回位置・英文・単語時刻・日本語訳を記録します。</dd>
+          </div>
+        </dl>
+        <div class="word-dialog__actions">
+          <button class="control control--primary" id="app-info-close" type="button">閉じる</button>
+        </div>
+      </div>
+    </dialog>
 
     <div class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./app.js?v=38"></script>
+    <script type="module" src="./app.js?v=40"></script>
   </body>
 </html>
