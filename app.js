@@ -2,6 +2,7 @@ const audio = document.querySelector("#audio");
 const fileInput = document.querySelector("#file-input");
 const fileAction = document.querySelector("#file-action");
 const filePickerLabel = document.querySelector("#file-picker-label");
+const filePickerText = document.querySelector("#file-picker-text");
 const seek = document.querySelector("#seek");
 const currentTimeLabel = document.querySelector("#current-time");
 const durationLabel = document.querySelector("#duration");
@@ -16,6 +17,8 @@ const repeatCountGroup = document.querySelector("#repeat-count-group");
 const repeatCountInput = document.querySelector("#repeat-count");
 const playbackRateStatus = document.querySelector("#playback-rate-status");
 const playbackRateSettingsButton = document.querySelector("#playback-rate-settings-button");
+const playbackRateDialog = document.querySelector("#playback-rate-dialog");
+const playbackRateClose = document.querySelector("#playback-rate-close");
 const playbackSettingsStatus = document.querySelector("#playback-settings-status");
 const playbackSettingsButton = document.querySelector("#playback-settings-button");
 const playbackSettingsDialog = document.querySelector("#playback-settings-dialog");
@@ -29,10 +32,13 @@ const practiceSettingsButton = document.querySelector("#practice-settings-button
 const practiceSettingsDialog = document.querySelector("#practice-settings-dialog");
 const practiceSettingsClose = document.querySelector("#practice-settings-close");
 const transcribeButton = document.querySelector("#transcribe-button");
+const showTranscriptButton = document.querySelector("#show-transcript-button");
 const transcriptOutput = document.querySelector("#transcript-output");
 const transcriptContent = document.querySelector("#transcript-content");
 const transcriptDisplayStatus = document.querySelector("#transcript-display-status");
 const transcriptDisplaySettingsButton = document.querySelector("#transcript-display-settings-button");
+const transcriptDisplayDialog = document.querySelector("#transcript-display-dialog");
+const transcriptDisplayClose = document.querySelector("#transcript-display-close");
 const transcriptSettingsButton = document.querySelector("#transcript-settings-button");
 const transcriptSettingsDialog = document.querySelector("#transcript-settings-dialog");
 const transcriptSettingsClose = document.querySelector("#transcript-settings-close");
@@ -111,6 +117,8 @@ let activeTranscriptRecord = null;
 let syncWordButtons = [];
 let activeSyncWordIndex = -1;
 let selectedWord = null;
+let transcriptEditorForcedTrackId = null;
+let openSwipeRow = null;
 
 const storedSettings = readStored(SETTINGS_KEY, {});
 const settings = {
@@ -128,6 +136,8 @@ if (!["sequence", "count", "infinite"].includes(settings.playbackMode)) {
 }
 settings.repeatCount = Math.min(99, Math.max(2, Math.round(Number(settings.repeatCount) || 3)));
 settings.transcriptShowFrom = Math.min(99, Math.max(1, Math.round(Number(settings.transcriptShowFrom) || 1)));
+const supportedPauseRatios = [0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.5];
+settings.pauseRatio = supportedPauseRatios.includes(Number(settings.pauseRatio)) ? Number(settings.pauseRatio) : 1.2;
 delete settings.repeatOne;
 const positions = readStored(POSITIONS_KEY, {});
 const loops = readStored(LOOPS_KEY, {});
@@ -202,7 +212,9 @@ function shouldShowTranscript(transcriptVisible, hasTrack, completedPlays, showF
 function syncTranscriptVisibility() {
   const enabled = settings.transcriptVisible !== false;
   const hasTrack = currentIndex >= 0;
-  const visible = shouldShowTranscript(enabled, hasTrack, completedPlaysForCurrentTrack, settings.transcriptShowFrom);
+  const forcedOpen = hasTrack && currentTrack()?.id === transcriptEditorForcedTrackId;
+  const visible = forcedOpen
+    || shouldShowTranscript(enabled, hasTrack, completedPlaysForCurrentTrack, settings.transcriptShowFrom);
   transcriptContent.hidden = !visible;
   transcriptDisplayModeSelect.value = enabled ? "show" : "hide";
   transcriptShowFromInput.value = String(settings.transcriptShowFrom);
@@ -222,6 +234,22 @@ function syncTranscriptVisibility() {
   if (visible && activeSyncWordIndex >= 0) {
     window.requestAnimationFrame(() => keepActiveWordVisible(syncWordButtons[activeSyncWordIndex]));
   }
+}
+
+function revealTranscriptEditor({ focus = false } = {}) {
+  const track = currentTrack();
+  if (!track || !transcriptOutput.value.trim()) return;
+  transcriptEditorForcedTrackId = track.id;
+  showTranscriptButton.disabled = false;
+  syncTranscriptVisibility();
+  if (transcriptSettingsDialog.open) transcriptSettingsDialog.close();
+  window.requestAnimationFrame(() => {
+    transcriptContent.scrollIntoView({
+      block: "start",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+    if (focus) transcriptOutput.focus({ preventScroll: true });
+  });
 }
 
 function openTranscriptDatabase() {
@@ -304,7 +332,9 @@ function setImportState(state) {
 
 async function addFiles(fileList) {
   setImportState("loading");
-  const candidates = [...fileList].filter(isAudioFile);
+  const candidates = [...fileList]
+    .filter(isAudioFile)
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }));
 
   if (candidates.length === 0) {
     setImportState("error");
@@ -312,15 +342,19 @@ async function addFiles(fileList) {
     return;
   }
 
-  const existingIds = new Set(tracks.map((track) => track.id));
-  const added = candidates
-    .filter((file) => !existingIds.has(fileId(file)))
-    .map((file) => ({
-      id: fileId(file),
+  const knownIds = new Set(tracks.map((track) => track.id));
+  const added = [];
+  candidates.forEach((file) => {
+    const id = fileId(file);
+    if (knownIds.has(id)) return;
+    knownIds.add(id);
+    added.push({
+      id,
       file,
       url: URL.createObjectURL(file),
       duration: null,
-    }));
+    });
+  });
 
   if (added.length === 0) {
     setImportState("error");
@@ -336,6 +370,16 @@ async function addFiles(fileList) {
   if (currentIndex === -1) selectTrack(firstAddedIndex);
 
   setImportState("success");
+  const skippedCount = candidates.length - added.length;
+  showStatus(
+    skippedCount > 0
+      ? `${added.length}件を追加しました。重複${skippedCount}件は除外しました。`
+      : `${added.length}件を再生リストに追加しました。`,
+  );
+}
+
+function syncFilePickerUi() {
+  filePickerText.textContent = tracks.length > 0 ? "音声を追加" : "音声を選ぶ";
 }
 
 function readTrackDuration(track) {
@@ -367,6 +411,7 @@ function selectTrack(index, autoplay = false) {
   cancelPracticePause(false);
   saveCurrentPosition();
   audio.pause();
+  transcriptEditorForcedTrackId = null;
   currentIndex = index;
   completedPlaysForCurrentTrack = 0;
   pendingAutoplay = autoplay;
@@ -426,22 +471,97 @@ function resetPlayer() {
   resetTranscriptPanel();
 }
 
+function setSwipeRowOpen(item, open) {
+  if (openSwipeRow && openSwipeRow !== item) {
+    openSwipeRow.dataset.swipeOpen = "false";
+    openSwipeRow.querySelector(".track-row__content")?.style.removeProperty("transform");
+  }
+  item.dataset.swipeOpen = String(open);
+  item.querySelector(".track-row__content")?.style.removeProperty("transform");
+  openSwipeRow = open ? item : null;
+}
+
+function enableSwipeToRemove(item, content) {
+  const revealDistance = 72;
+  let gesture = null;
+
+  content.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" || event.button !== 0) return;
+    if (openSwipeRow && openSwipeRow !== item) setSwipeRowOpen(openSwipeRow, false);
+    gesture = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      baseX: item.dataset.swipeOpen === "true" ? -revealDistance : 0,
+      dragging: false,
+    };
+    content.setPointerCapture?.(event.pointerId);
+  });
+
+  content.addEventListener("pointermove", (event) => {
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+    if (!gesture.dragging) {
+      if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 8) return;
+      if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        gesture = null;
+        return;
+      }
+      gesture.dragging = true;
+    }
+    event.preventDefault();
+    const nextX = Math.max(-revealDistance, Math.min(0, gesture.baseX + deltaX));
+    content.style.transform = `translateX(${nextX}px)`;
+  });
+
+  const finishSwipe = (event) => {
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+    if (gesture.dragging) {
+      const finalX = Math.max(
+        -revealDistance,
+        Math.min(0, gesture.baseX + event.clientX - gesture.startX),
+      );
+      item.dataset.suppressClick = "true";
+      window.setTimeout(() => delete item.dataset.suppressClick, 0);
+      setSwipeRowOpen(item, finalX <= -revealDistance / 2);
+    }
+    gesture = null;
+  };
+
+  content.addEventListener("pointerup", finishSwipe);
+  content.addEventListener("pointercancel", finishSwipe);
+}
+
 function renderLibrary() {
   trackList.replaceChildren();
+  openSwipeRow = null;
   libraryCount.textContent = `${tracks.length}件`;
   emptyLibrary.hidden = tracks.length > 0;
+  syncFilePickerUi();
 
   tracks.forEach((track, index) => {
     const item = document.createElement("li");
     item.className = "track-row";
     item.dataset.current = String(index === currentIndex);
+    item.dataset.swipeOpen = "false";
+
+    const content = document.createElement("div");
+    content.className = "track-row__content";
 
     const selectButton = document.createElement("button");
     selectButton.className = "track-select";
     selectButton.type = "button";
     selectButton.setAttribute("aria-label", `${track.file.name}を再生`);
     if (index === currentIndex) selectButton.setAttribute("aria-current", "true");
-    selectButton.addEventListener("click", () => selectTrack(index, true));
+    selectButton.addEventListener("click", (event) => {
+      if (item.dataset.suppressClick === "true" || item.dataset.swipeOpen === "true") {
+        event.preventDefault();
+        setSwipeRowOpen(item, false);
+        return;
+      }
+      selectTrack(index, true);
+    });
 
     const name = document.createElement("span");
     name.className = "track-select__name";
@@ -457,13 +577,12 @@ function renderLibrary() {
     removeButton.className = "track-remove";
     removeButton.type = "button";
     removeButton.setAttribute("aria-label", `${track.file.name}をリストから外す`);
-    removeButton.innerHTML = `
-      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M5 12h14" />
-      </svg>`;
+    removeButton.textContent = "削除";
     removeButton.addEventListener("click", () => removeTrack(index));
 
-    item.append(selectButton, removeButton);
+    content.append(selectButton);
+    item.append(content, removeButton);
+    enableSwipeToRemove(item, content);
     trackList.append(item);
   });
 
@@ -738,6 +857,7 @@ function handleSynchronizedWord(word) {
 }
 
 function resolvePlaybackAfterEnd(playbackMode, index, trackCount, repeatCount, completedPlays) {
+  const firstTrackIndex = trackCount > 0 ? 0 : -1;
   if (playbackMode === "infinite") {
     return { targetIndex: index, completedPlays: completedPlays + 1 };
   }
@@ -748,13 +868,13 @@ function resolvePlaybackAfterEnd(playbackMode, index, trackCount, repeatCount, c
       return { targetIndex: index, completedPlays: nextCompletedPlays };
     }
     return {
-      targetIndex: index < trackCount - 1 ? index + 1 : -1,
+      targetIndex: index < trackCount - 1 ? index + 1 : firstTrackIndex,
       completedPlays: 0,
     };
   }
 
   return {
-    targetIndex: index < trackCount - 1 ? index + 1 : -1,
+    targetIndex: index < trackCount - 1 ? index + 1 : firstTrackIndex,
     completedPlays: 0,
   };
 }
@@ -799,11 +919,13 @@ async function activatePracticeTarget(targetIndex, autoplay) {
 
 function resetTranscriptPanel() {
   window.clearTimeout(transcriptSaveTimer);
+  transcriptEditorForcedTrackId = null;
   activeTranscriptRecord = null;
   transcriptOutput.value = "";
   delete transcriptOutput.dataset.state;
   transcriptOutput.disabled = true;
   transcribeButton.disabled = true;
+  showTranscriptButton.disabled = true;
   saveTranscriptButton.disabled = true;
   deleteTranscriptButton.disabled = true;
   delete transcriptStatus.dataset.state;
@@ -818,6 +940,7 @@ async function loadTranscript(track) {
   transcriptOutput.dataset.state = "loading";
   transcriptOutput.disabled = false;
   transcribeButton.disabled = transcribingTrackId !== null;
+  showTranscriptButton.disabled = true;
   saveTranscriptButton.disabled = true;
   deleteTranscriptButton.disabled = true;
   transcriptStatus.dataset.state = "loading";
@@ -834,6 +957,7 @@ async function loadTranscript(track) {
       transcriptOutput.dataset.state = "success";
       saveTranscriptButton.disabled = false;
       deleteTranscriptButton.disabled = false;
+      showTranscriptButton.disabled = false;
       transcriptStatus.dataset.state = "success";
       transcriptStatus.textContent = "この音声の保存済みスクリプトを表示しています。";
       renderSynchronizedTranscript(record.words || []);
@@ -929,10 +1053,12 @@ async function startTranscription() {
       transcriptOutput.dataset.state = "success";
       saveTranscriptButton.disabled = false;
       deleteTranscriptButton.disabled = false;
+      showTranscriptButton.disabled = false;
       transcriptStatus.dataset.state = "success";
       transcriptStatus.textContent = "英文を生成し、このブラウザに保存しました。日本語訳も続けて生成します。";
       renderSynchronizedTranscript(record.words);
       renderTranslation("");
+      revealTranscriptEditor();
     } else {
       showStatus(`${track.file.name}の英語スクリプトを保存しました。`);
     }
@@ -1107,6 +1233,7 @@ async function saveTranscript() {
     saveTranscriptButton.dataset.state = "success";
     transcriptOutput.dataset.state = "success";
     deleteTranscriptButton.disabled = false;
+    showTranscriptButton.disabled = false;
     transcriptStatus.dataset.state = "success";
     transcriptStatus.textContent = textChanged
       ? "修正したスクリプトを保存しました。単語同期は再生成すると利用できます。"
@@ -1128,14 +1255,17 @@ async function removeStoredTranscript() {
   try {
     await deleteStoredTranscript(track.id);
     activeTranscriptRecord = null;
+    transcriptEditorForcedTrackId = null;
     transcriptOutput.value = "";
     delete transcriptOutput.dataset.state;
     saveTranscriptButton.disabled = true;
     deleteTranscriptButton.disabled = true;
+    showTranscriptButton.disabled = true;
     delete transcriptStatus.dataset.state;
     transcriptStatus.textContent = "保存済みスクリプトを削除しました。音声から再生成できます。";
     renderSynchronizedTranscript([]);
     renderTranslation("");
+    syncTranscriptVisibility();
   } catch {
     transcriptOutput.dataset.state = "error";
     transcriptStatus.dataset.state = "error";
@@ -1341,14 +1471,16 @@ practiceSettingsButton.addEventListener("click", () => {
   const selectedModeButton = settings.practiceMode === "auto" ? autoNextModeButton : manualNextModeButton;
   openSettingsDialog(practiceSettingsDialog, selectedModeButton);
 });
-playbackRateSettingsButton.addEventListener("click", () => openSettingsDialog(playbackSettingsDialog, rateSelect));
+playbackRateSettingsButton.addEventListener("click", () => openSettingsDialog(playbackRateDialog, rateSelect));
 playbackSettingsButton.addEventListener("click", () => openSettingsDialog(playbackSettingsDialog, playbackModeSelect));
+playbackRateClose.addEventListener("click", () => playbackRateDialog.close());
 playbackSettingsClose.addEventListener("click", () => playbackSettingsDialog.close());
 practiceSettingsClose.addEventListener("click", () => practiceSettingsDialog.close());
 loopSettingsButton.addEventListener("click", () => openSettingsDialog(loopSettingsDialog, setAButton));
 loopSettingsClose.addEventListener("click", () => loopSettingsDialog.close());
 closeSettingsOnBackdrop(practiceSettingsDialog);
 closeSettingsOnBackdrop(loopSettingsDialog);
+closeSettingsOnBackdrop(playbackRateDialog);
 closeSettingsOnBackdrop(playbackSettingsDialog);
 
 pauseRatioSelect.addEventListener("change", () => {
@@ -1361,6 +1493,7 @@ pauseRatioSelect.addEventListener("change", () => {
 });
 
 transcribeButton.addEventListener("click", startTranscription);
+showTranscriptButton.addEventListener("click", () => revealTranscriptEditor({ focus: true }));
 saveTranscriptButton.addEventListener("click", saveTranscript);
 deleteTranscriptButton.addEventListener("click", removeStoredTranscript);
 translateButton.addEventListener("click", () => startTranslation(activeTranscriptRecord, true));
@@ -1385,15 +1518,20 @@ translationSettingsForm.addEventListener("submit", (event) => {
     startTranslation(activeTranscriptRecord, true);
   }
 });
-transcriptDisplaySettingsButton.addEventListener("click", () => openSettingsDialog(transcriptSettingsDialog, transcriptDisplayModeSelect));
+transcriptDisplaySettingsButton.addEventListener("click", () => openSettingsDialog(transcriptDisplayDialog, transcriptDisplayModeSelect));
 transcriptSettingsButton.addEventListener("click", () => {
-  const firstContentAction = transcribeButton.disabled ? translationSettingsButton : transcribeButton;
+  const firstContentAction = !showTranscriptButton.disabled
+    ? showTranscriptButton
+    : (transcribeButton.disabled ? translationSettingsButton : transcribeButton);
   openSettingsDialog(transcriptSettingsDialog, firstContentAction);
 });
 transcriptSettingsClose.addEventListener("click", () => transcriptSettingsDialog.close());
+transcriptDisplayClose.addEventListener("click", () => transcriptDisplayDialog.close());
 closeSettingsOnBackdrop(transcriptSettingsDialog);
+closeSettingsOnBackdrop(transcriptDisplayDialog);
 transcriptDisplayModeSelect.addEventListener("change", () => {
   settings.transcriptVisible = transcriptDisplayModeSelect.value === "show";
+  if (!settings.transcriptVisible) transcriptEditorForcedTrackId = null;
   writeStored(SETTINGS_KEY, settings);
   syncTranscriptVisibility();
 });
@@ -1414,7 +1552,9 @@ transcriptShowFromInput.addEventListener("input", () => updateTranscriptShowFrom
 transcriptShowFromInput.addEventListener("change", () => updateTranscriptShowFrom(true));
 transcriptOutput.addEventListener("input", () => {
   delete transcriptOutput.dataset.state;
-  saveTranscriptButton.disabled = transcriptOutput.value.trim().length === 0;
+  const hasText = transcriptOutput.value.trim().length > 0;
+  saveTranscriptButton.disabled = !hasText;
+  showTranscriptButton.disabled = !hasText;
   const unchanged = transcriptOutput.value.trim() === activeTranscriptRecord?.text;
   renderSynchronizedTranscript(unchanged ? activeTranscriptRecord?.words : []);
   renderTranslation(unchanged ? activeTranscriptRecord?.translation : "");

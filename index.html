@@ -29,28 +29,9 @@
     </header>
 
     <main id="app" class="app-shell">
-      <section class="intro reveal" style="--i: 0" aria-labelledby="page-title">
-        <h1 class="visually-hidden" id="page-title">Listening Desk</h1>
+      <h1 class="visually-hidden" id="page-title">Listening Desk</h1>
 
-        <div class="file-action" id="file-action">
-          <input
-            class="visually-hidden"
-            id="file-input"
-            type="file"
-            accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac"
-            multiple
-          />
-          <label class="control control--primary file-picker" for="file-input" id="file-picker-label">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v5h14v-5" />
-            </svg>
-            音声を選ぶ
-          </label>
-          <p class="file-action__note">再生時は端末内だけで処理します。英文生成を選んだときだけ、音声をOpenAI APIへ送信します。</p>
-        </div>
-      </section>
-
-      <section class="workbench reveal" style="--i: 1" aria-label="音声プレイヤー">
+      <section class="workbench reveal" style="--i: 0" aria-label="音声プレイヤー">
         <div class="player-pane">
           <audio id="audio" preload="metadata"></audio>
 
@@ -150,11 +131,11 @@
             ファイル終了後、再生ボタンを押すまで次の音声を待ちます。
           </p>
 
-          <dialog class="word-dialog settings-dialog" id="playback-settings-dialog" aria-labelledby="playback-dialog-title" tabindex="-1">
+          <dialog class="word-dialog settings-dialog" id="playback-rate-dialog" aria-labelledby="playback-rate-dialog-title" tabindex="-1">
             <div class="word-dialog__inner">
               <p class="word-dialog__label">再生設定</p>
-              <h3 id="playback-dialog-title">速度と繰り返し</h3>
-              <p class="settings-dialog__note">再生速度と、音声ごとの繰り返し方法を変更します。</p>
+              <h3 id="playback-rate-dialog-title">再生速度</h3>
+              <p class="settings-dialog__note">音声の再生速度を変更します。</p>
               <div class="settings-fields">
                 <div class="field-group">
                   <label for="playback-rate">再生速度</label>
@@ -169,7 +150,19 @@
                     <option value="2">2.00×</option>
                   </select>
                 </div>
+              </div>
+              <div class="word-dialog__actions">
+                <button class="control control--primary" id="playback-rate-close" type="button">閉じる</button>
+              </div>
+            </div>
+          </dialog>
 
+          <dialog class="word-dialog settings-dialog" id="playback-settings-dialog" aria-labelledby="playback-dialog-title" tabindex="-1">
+            <div class="word-dialog__inner">
+              <p class="word-dialog__label">再生設定</p>
+              <h3 id="playback-dialog-title">再生方法と回数</h3>
+              <p class="settings-dialog__note">次の音声へ進む方法と、音声ごとの再生回数を変更します。</p>
+              <div class="settings-fields">
                 <div class="field-group">
                   <label for="playback-mode">再生方法</label>
                   <select id="playback-mode" class="field-control">
@@ -208,6 +201,10 @@
                 <div class="field-group">
                   <label for="pause-ratio">自動ポーズの長さ</label>
                   <select id="pause-ratio" class="field-control" disabled>
+                    <option value="0.7">再生時間の0.7倍</option>
+                    <option value="0.8">再生時間の0.8倍</option>
+                    <option value="0.9">再生時間の0.9倍</option>
+                    <option value="1">再生時間と同じ</option>
                     <option value="1.1">再生時間の1.1倍</option>
                     <option value="1.2" selected>再生時間の1.2倍</option>
                     <option value="1.5">再生時間の1.5倍</option>
@@ -246,10 +243,10 @@
           </dialog>
 
           <section class="transcript-panel" aria-label="英語スクリプトと日本語訳">
-            <dialog class="word-dialog settings-dialog" id="transcript-settings-dialog" aria-labelledby="transcript-settings-title" tabindex="-1">
+            <dialog class="word-dialog settings-dialog" id="transcript-display-dialog" aria-labelledby="transcript-display-dialog-title" tabindex="-1">
               <div class="word-dialog__inner">
-                <p class="word-dialog__label">スクリプト設定</p>
-                <h3 id="transcript-settings-title">表示タイミング</h3>
+                <p class="word-dialog__label">スクリプト表示設定</p>
+                <h3 id="transcript-display-dialog-title">表示タイミング</h3>
                 <p class="settings-dialog__note">最初は音声だけを聞き、指定した再生回数から英文と日本語訳を表示できます。</p>
                 <div class="settings-fields">
                   <div class="field-group">
@@ -265,7 +262,19 @@
                   </div>
                 </div>
                 <div class="word-dialog__actions">
+                  <button class="control control--primary" id="transcript-display-close" type="button">閉じる</button>
+                </div>
+              </div>
+            </dialog>
+
+            <dialog class="word-dialog settings-dialog" id="transcript-settings-dialog" aria-labelledby="transcript-settings-title" tabindex="-1">
+              <div class="word-dialog__inner">
+                <p class="word-dialog__label">英語スクリプト / 日本語訳</p>
+                <h3 id="transcript-settings-title">生成と編集</h3>
+                <p class="settings-dialog__note">音声から英文を生成し、表示された内容を修正してこのブラウザに保存できます。</p>
+                <div class="word-dialog__actions">
                   <button class="control control--primary" id="transcribe-button" type="button" disabled>音声から生成</button>
+                  <button class="control control--quiet" id="show-transcript-button" type="button" disabled>表示・編集</button>
                   <button class="control control--quiet" id="translation-settings-button" type="button">OpenAI API設定</button>
                   <button class="control control--quiet" id="transcript-settings-close" type="button">閉じる</button>
                 </div>
@@ -344,18 +353,35 @@
 
         <aside class="library-pane" aria-labelledby="library-title">
           <div class="library-heading">
-            <div>
+            <div class="library-heading__copy">
               <h2 id="library-title">再生リスト</h2>
               <p id="library-count">0件</p>
+              <p class="library-swipe-hint">左へスワイプして削除</p>
+            </div>
+            <div class="file-action" id="file-action">
+              <input
+                class="visually-hidden"
+                id="file-input"
+                type="file"
+                accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac"
+                multiple
+              />
+              <label class="control control--primary file-picker" for="file-input" id="file-picker-label">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v5h14v-5" />
+                </svg>
+                <span id="file-picker-text">音声を選ぶ</span>
+              </label>
             </div>
           </div>
+          <p class="library-import-note">複数ファイルをまとめて選べます。再生時は端末内だけで処理します。</p>
 
           <div class="empty-library" id="empty-library">
             <svg class="empty-library__mark" viewBox="0 0 80 48" aria-hidden="true">
               <path d="M4 24h8l5-14 8 28 8-22 8 16 7-11 6 6h22" />
             </svg>
             <p>再生リストは空です。</p>
-            <span>上の「音声を選ぶ」から、学習するファイルを追加してください。</span>
+            <span>「音声を選ぶ」から、学習するファイルを追加してください。</span>
           </div>
 
           <ol class="track-list" id="track-list" aria-label="選択した音声"></ol>
