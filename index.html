@@ -78,54 +78,63 @@
           </div>
 
           <section class="learning-settings" aria-label="学習設定">
-            <button
-              class="control control--quiet setting-chip"
-              id="playback-rate-settings-button"
-              type="button"
-              aria-haspopup="dialog"
-            >
-              <span id="playback-rate-status">1.00×</span>
-            </button>
-            <button
-              class="control control--quiet setting-chip"
-              id="playback-settings-button"
-              type="button"
-              aria-haspopup="dialog"
-            >
-              <span id="playback-settings-status" aria-live="polite">順番に次へ</span>
-            </button>
-            <button
-              class="control control--quiet setting-chip"
-              id="transcript-display-settings-button"
-              type="button"
-              aria-haspopup="dialog"
-            >
-              <span id="transcript-display-status" aria-live="polite">スクリプト表示・1回目から</span>
-            </button>
-            <button
-              class="control control--quiet setting-chip"
-              id="practice-settings-button"
-              type="button"
-              aria-haspopup="dialog"
-            >
-              <span id="practice-settings-status">手動で次へ</span>
-            </button>
-            <button
-              class="control control--quiet setting-chip"
-              id="loop-settings-button"
-              type="button"
-              aria-haspopup="dialog"
-            >
-              <span id="loop-status" aria-live="polite">区間リピートOFF</span>
-            </button>
-            <button
-              class="control control--quiet setting-chip"
-              id="transcript-settings-button"
-              type="button"
-              aria-haspopup="dialog"
-            >
-              英語スクリプト / 日本語訳
-            </button>
+            <div class="learning-settings__group" aria-label="再生の設定">
+              <button
+                class="control control--quiet setting-chip"
+                id="playback-rate-settings-button"
+                type="button"
+                aria-haspopup="dialog"
+                aria-label="再生速度を変更"
+              >
+                <span id="playback-rate-status">1.00×</span>
+              </button>
+              <button
+                class="control control--quiet setting-chip"
+                id="playback-settings-button"
+                type="button"
+                aria-haspopup="dialog"
+                aria-label="再生方法と回数を変更"
+              >
+                <span id="playback-settings-status" aria-live="polite">順番に次へ</span>
+              </button>
+              <button
+                class="control control--quiet setting-chip"
+                id="practice-settings-button"
+                type="button"
+                aria-haspopup="dialog"
+                aria-label="自動ポーズを変更"
+              >
+                <span id="practice-settings-status">手動で次へ</span>
+              </button>
+            </div>
+            <div class="learning-settings__group learning-settings__group--study" aria-label="スクリプトと反復の設定">
+              <button
+                class="control control--quiet setting-chip"
+                id="transcript-display-settings-button"
+                type="button"
+                aria-haspopup="dialog"
+                aria-label="スクリプトの表示タイミングを変更"
+              >
+                <span id="transcript-display-status" aria-live="polite">スクリプト表示・1回目から</span>
+              </button>
+              <button
+                class="control control--quiet setting-chip"
+                id="loop-settings-button"
+                type="button"
+                aria-haspopup="dialog"
+                aria-label="区間リピートを設定"
+              >
+                <span id="loop-status" aria-live="polite">区間リピートOFF</span>
+              </button>
+              <button
+                class="control control--quiet setting-chip"
+                id="transcript-settings-button"
+                type="button"
+                aria-haspopup="dialog"
+              >
+                英文 / 日本語訳
+              </button>
+            </div>
           </section>
           <p class="visually-hidden" id="practice-status" aria-live="polite">
             ファイル終了後、再生ボタンを押すまで次の音声を待ちます。
@@ -392,8 +401,6 @@
               </button>
             </div>
           </div>
-          <p class="library-import-note">ファイルの複数選択と、対応ブラウザでのフォルダ追加ができます。</p>
-
           <dialog class="word-dialog settings-dialog" id="import-dialog" aria-labelledby="import-dialog-title" tabindex="-1">
             <div class="word-dialog__inner">
               <p class="word-dialog__label">再生リスト</p>
@@ -414,8 +421,8 @@
             <svg class="empty-library__mark" viewBox="0 0 80 48" aria-hidden="true">
               <path d="M4 24h8l5-14 8 28 8-22 8 16 7-11 6 6h22" />
             </svg>
-            <p>再生リストは空です。</p>
-            <span>「音声を追加」から、学習するファイルまたはフォルダを選んでください。</span>
+            <p>音声はまだありません。</p>
+            <span>ファイルまたはフォルダを追加してください。</span>
           </div>
 
           <ol class="track-list" id="track-list" aria-label="選択した音声"></ol>
