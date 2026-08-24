@@ -104,6 +104,10 @@
                 aria-haspopup="dialog"
                 aria-label="自動ポーズを変更"
               >
+                <svg class="icon setting-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="8" />
+                  <path d="M10 9v6M14 9v6" />
+                </svg>
                 <span id="practice-settings-status">手動で次へ</span>
               </button>
             </div>
@@ -115,7 +119,11 @@
                 aria-haspopup="dialog"
                 aria-label="スクリプトの表示タイミングを変更"
               >
-                <span id="transcript-display-status" aria-live="polite">スクリプト表示・1回目から</span>
+                <svg class="icon setting-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M6 3.5h8l4 4V20.5H6V3.5Z" />
+                  <path d="M14 3.5v4h4M9 12h6M9 16h5" />
+                </svg>
+                <span id="transcript-display-status" aria-live="polite">英文1→</span>
               </button>
               <button
                 class="control control--quiet setting-chip"
@@ -124,7 +132,10 @@
                 aria-haspopup="dialog"
                 aria-label="区間リピートを設定"
               >
-                <span id="loop-status" aria-live="polite">区間リピートOFF</span>
+                <svg class="icon setting-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 6v12M19 6v12M8 9h8l-2-2M16 15H8l2 2" />
+                </svg>
+                <span id="loop-status" aria-live="polite">A–B OFF</span>
               </button>
               <button
                 class="control control--quiet setting-chip"

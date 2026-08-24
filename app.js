@@ -282,13 +282,9 @@ function syncTranscriptVisibility() {
   transcriptShowFromInput.disabled = !enabled;
 
   if (!enabled) {
-    transcriptDisplayStatus.textContent = "スクリプト非表示";
-  } else if (settings.playbackMode === "sequence" && settings.transcriptShowFrom > 1) {
-    transcriptDisplayStatus.textContent = `スクリプト表示・${settings.transcriptShowFrom}回目から・要確認`;
-  } else if (settings.playbackMode === "count" && settings.transcriptShowFrom > settings.repeatCount) {
-    transcriptDisplayStatus.textContent = `スクリプト表示・${settings.transcriptShowFrom}回目から・要確認`;
+    transcriptDisplayStatus.textContent = "英文OFF";
   } else {
-    transcriptDisplayStatus.textContent = `スクリプト表示・${settings.transcriptShowFrom}回目から`;
+    transcriptDisplayStatus.textContent = `英文${settings.transcriptShowFrom}→`;
   }
 
   if (visible && activeSyncWordIndex >= 0) {
@@ -720,7 +716,7 @@ function syncPlaybackSettingsUi() {
   const rateLabel = rateSelect.selectedOptions[0]?.textContent || `${settings.rate.toFixed(2)}×`;
   let modeLabel = "順番に次へ";
   if (settings.playbackMode === "count") {
-    modeLabel = `回数を決めて次へ・${settings.repeatCount}回`;
+    modeLabel = `× ${settings.repeatCount}回`;
   } else if (settings.playbackMode === "infinite") {
     modeLabel = "1曲を無限リピート";
   }
@@ -735,7 +731,7 @@ function syncPracticeUi() {
   autoNextModeButton.setAttribute("aria-pressed", String(mode === "auto"));
   pauseRatioSelect.disabled = mode !== "auto";
   practiceSettingsStatus.textContent = mode === "auto"
-    ? `待って自動再生・${settings.pauseRatio}倍`
+    ? "ポーズ"
     : "手動で次へ";
 
   if (isPracticePause) {
@@ -1527,11 +1523,11 @@ function syncLoopUi() {
   loopToggleButton.setAttribute("aria-pressed", String(enabled));
   loopToggleButton.textContent = `区間リピート：${enabled ? "入" : "切"}`;
   if (validLoop(loop)) {
-    loopStatus.textContent = `区間リピート${enabled ? "ON" : "OFF"}`;
+    loopStatus.textContent = `A–B ${enabled ? "ON" : "OFF"}`;
   } else if (Number.isFinite(loop.a) || Number.isFinite(loop.b)) {
-    loopStatus.textContent = "区間リピート・設定中";
+    loopStatus.textContent = "A–B 設定中";
   } else {
-    loopStatus.textContent = "区間リピートOFF";
+    loopStatus.textContent = "A–B OFF";
   }
   syncWordLoopRange();
   syncControls();
