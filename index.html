@@ -26,7 +26,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=38" />
+    <link rel="stylesheet" href="./styles.css?v=39" />
     <title>Listening Desk — 英語音声プレイヤー</title>
   </head>
   <body>
@@ -144,75 +144,71 @@
           </div>
 
           <section class="learning-settings" aria-label="学習設定">
-            <div class="learning-settings__group" aria-label="再生の設定">
-              <button
-                class="control control--quiet setting-chip"
-                id="playback-rate-settings-button"
-                type="button"
-                aria-haspopup="dialog"
-                aria-label="再生速度を変更"
-              >
-                <span id="playback-rate-status">1.00×</span>
-              </button>
-              <button
-                class="control control--quiet setting-chip"
-                id="playback-settings-button"
-                type="button"
-                aria-haspopup="dialog"
-                aria-label="再生方法と回数を変更"
-              >
-                <span id="playback-settings-status" aria-live="polite">順番に次へ</span>
-              </button>
-              <button
-                class="control control--quiet setting-chip"
-                id="practice-settings-button"
-                type="button"
-                aria-haspopup="dialog"
-                aria-label="自動ポーズを変更"
-              >
-                <svg class="icon setting-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="12" cy="12" r="8" />
-                  <path d="M10 9v6M14 9v6" />
-                </svg>
-                <span id="practice-settings-status">手動で次へ</span>
-              </button>
-            </div>
-            <div class="learning-settings__group learning-settings__group--study" aria-label="スクリプトと反復の設定">
-              <button
-                class="control control--quiet setting-chip"
-                id="transcript-display-settings-button"
-                type="button"
-                aria-haspopup="dialog"
-                aria-label="スクリプトの表示タイミングを変更"
-              >
-                <svg class="icon setting-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M6 3.5h8l4 4V20.5H6V3.5Z" />
-                  <path d="M14 3.5v4h4M9 12h6M9 16h5" />
-                </svg>
-                <span id="transcript-display-status" aria-live="polite">英文1→</span>
-              </button>
-              <button
-                class="control control--quiet setting-chip"
-                id="loop-settings-button"
-                type="button"
-                aria-haspopup="dialog"
-                aria-label="区間リピートを設定"
-              >
-                <svg class="icon setting-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M5 6v12M19 6v12M8 9h8l-2-2M16 15H8l2 2" />
-                </svg>
-                <span id="loop-status" aria-live="polite">A–B OFF</span>
-              </button>
-              <button
-                class="control control--quiet setting-chip"
-                id="transcript-settings-button"
-                type="button"
-                aria-haspopup="dialog"
-                hidden
-              >
-                英文 / 日本語訳
-              </button>
-            </div>
+            <button
+              class="control control--quiet setting-chip"
+              id="playback-rate-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+              aria-label="再生速度を変更"
+            >
+              <span id="playback-rate-status">1.00×</span>
+            </button>
+            <button
+              class="control control--quiet setting-chip"
+              id="playback-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+              aria-label="再生方法と回数を変更"
+            >
+              <span id="playback-settings-status" aria-live="polite">順番に次へ</span>
+            </button>
+            <button
+              class="control control--quiet setting-chip"
+              id="practice-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+              aria-label="自動ポーズを変更"
+            >
+              <svg class="icon setting-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="8" />
+                <path d="M10 9v6M14 9v6" />
+              </svg>
+              <span id="practice-settings-status">手動で次へ</span>
+            </button>
+            <button
+              class="control control--quiet setting-chip"
+              id="transcript-display-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+              aria-label="スクリプトの表示タイミングを変更"
+            >
+              <svg class="icon setting-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 3.5h8l4 4V20.5H6V3.5Z" />
+                <path d="M14 3.5v4h4M9 12h6M9 16h5" />
+              </svg>
+              <span id="transcript-display-status" aria-live="polite">英文1→</span>
+            </button>
+            <button
+              class="control control--quiet setting-chip"
+              id="loop-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+              aria-label="区間リピートを設定"
+            >
+              <svg class="icon setting-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 6v12M19 6v12M8 9h8l-2-2M16 15H8l2 2" />
+              </svg>
+              <span id="loop-status" aria-live="polite">A–B OFF</span>
+            </button>
+            <button
+              class="control control--quiet setting-chip"
+              id="transcript-settings-button"
+              type="button"
+              aria-haspopup="dialog"
+              hidden
+            >
+              英文 / 日本語訳
+            </button>
           </section>
           <p class="visually-hidden" id="practice-status" aria-live="polite">
             ファイル終了後、再生ボタンを押すまで次の音声を待ちます。
