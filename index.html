@@ -404,13 +404,20 @@
           <dialog class="word-dialog settings-dialog" id="import-dialog" aria-labelledby="import-dialog-title" tabindex="-1">
             <div class="word-dialog__inner">
               <p class="word-dialog__label">再生リスト</p>
-              <h3 id="import-dialog-title">音声を追加</h3>
-              <p class="settings-dialog__note">複数の音声ファイル、または音声が入ったフォルダをまとめて追加できます。</p>
+              <h3 id="import-dialog-title">まとめて音声を追加</h3>
+              <p class="settings-dialog__note">1件ずつ追加する必要はありません。複数ファイルを一度に選ぶか、フォルダごと追加できます。</p>
               <div class="import-options">
-                <button class="control control--primary" id="choose-files-button" type="button">ファイルを選ぶ</button>
-                <button class="control control--quiet" id="choose-folder-button" type="button">フォルダを選ぶ</button>
+                <button class="control control--primary" id="choose-files-button" type="button">複数ファイルを選ぶ</button>
+                <button class="control control--quiet" id="choose-folder-button" type="button">フォルダごと選ぶ</button>
               </div>
-              <p class="import-support-note" id="folder-support-note">フォルダ内の対応音声だけを、名前順に追加します。</p>
+              <div class="import-guide" aria-labelledby="import-guide-title">
+                <p id="import-guide-title">1回で複数選ぶ方法</p>
+                <ul>
+                  <li><strong>iPhone / iPad</strong><span>右上の「…」→「選択」で音声を複数選び、「開く」。</span></li>
+                  <li><strong>Android</strong><span>最初の音声を長押しし、残りをタップして「選択」。</span></li>
+                </ul>
+              </div>
+              <p class="import-support-note" id="folder-support-note">フォルダを選ぶと、中の対応音声を名前順にまとめて追加します。</p>
               <div class="word-dialog__actions">
                 <button class="control control--text" id="import-dialog-close" type="button">閉じる</button>
               </div>

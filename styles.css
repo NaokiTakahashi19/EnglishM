@@ -416,7 +416,6 @@ h3 {
 
 .import-options {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-sm);
 }
 
@@ -429,6 +428,41 @@ h3 {
   min-height: 1lh;
   color: var(--color-muted);
   font-size: var(--text-xs);
+}
+
+.import-guide {
+  display: grid;
+  gap: var(--space-xs);
+  padding-block: var(--space-sm);
+  border-block: var(--rule-thin) solid var(--color-rule);
+}
+
+.import-guide > p {
+  font-weight: 700;
+}
+
+.import-guide ul {
+  display: grid;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.import-guide li {
+  display: grid;
+  gap: var(--space-2xs);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.import-guide strong {
+  color: var(--color-ink);
+}
+
+#import-dialog h3 {
+  font-size: var(--text-lg);
 }
 
 .practice-modes,
@@ -1150,6 +1184,15 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
 }
 
 @media (min-width: 40rem) {
+  .import-options {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .import-guide li {
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: var(--space-xs);
+  }
+
   .library-heading h2 {
     font-size: var(--text-lg);
   }
