@@ -1,11 +1,15 @@
-/* Hallmark · macrostructure: Feature Stack · genre: editorial · theme: Almanac · anchor: warm sepia · tone: utilitarian
+/* Hallmark · macrostructure: Feature Stack · genre: editorial · theme: selectable Warm / Blue / Sage / Night · tone: utilitarian
  * audience: mobile-first individual English learners · use: follow audio, transcript, and repetition controls without losing playback
  * enrichment: none · nav: N9 edge-aligned minimal · footer: Ft4 dense typographic · F2 fallback: compact vertical priority stack
  * N9 knobs: CTA=outlined · wordmark=serif · padding=tight · Ft4 knobs: family=mono · layout=single block
  * contrast: pass (40–41) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · mobile: pass (34, 49–57)
  */
+/* Hallmark · component: theme switcher · genre: editorial · theme: selectable learning palettes
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: pass (40–41, 49)
+ */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · slop: pass (1–58) */
-@import url("./tokens.css");
+@import url("./tokens.css?v=38");
 
 *,
 *::before,
@@ -21,6 +25,10 @@ body {
 html {
   color-scheme: light;
   scroll-behavior: smooth;
+}
+
+html[data-theme="night"] {
+  color-scheme: dark;
 }
 
 body {
@@ -120,6 +128,14 @@ h3 {
   border-block-end: var(--rule-thin) solid var(--color-rule);
 }
 
+.nav-edge__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
 .wordmark {
   display: inline-flex;
   align-items: center;
@@ -144,6 +160,20 @@ h3 {
   font-size: var(--text-xs);
   font-weight: 500;
   letter-spacing: 0.02em;
+}
+
+.nav-edge:has(.install-button:not([hidden])) .wordmark__name {
+  display: none;
+}
+
+.theme-settings-button {
+  flex: 0 0 auto;
+  width: var(--size-touch);
+  padding: 0;
+}
+
+.theme-settings-button > span {
+  display: none;
 }
 
 .app-shell {
@@ -386,8 +416,7 @@ h3 {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-#practice-settings-button,
-#transcript-display-settings-button {
+#practice-settings-button {
   grid-column: 1 / -1;
 }
 
@@ -418,6 +447,134 @@ h3 {
 .settings-fields {
   display: grid;
   gap: var(--space-lg);
+}
+
+.theme-options {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.theme-option {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  min-height: var(--size-touch);
+  padding: var(--space-xs) var(--space-sm);
+  border: var(--rule-thin) solid var(--color-rule);
+  border-radius: var(--radius-sm);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+.theme-option input {
+  width: var(--space-md);
+  height: var(--space-md);
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.theme-option input:focus-visible {
+  outline: 0;
+}
+
+.theme-option__number {
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.theme-option strong {
+  min-width: 0;
+  overflow: clip;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-option__state {
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.theme-option:has(input:checked) {
+  border-color: var(--color-accent);
+  background: var(--color-paper-2);
+}
+
+.theme-option:has(input:checked) .theme-option__state,
+.theme-option[data-state="loading"] .theme-option__state,
+.theme-option[data-state="error"] .theme-option__state,
+.theme-option[data-state="success"] .theme-option__state {
+  opacity: 1;
+}
+
+.theme-option:has(input:focus-visible) {
+  outline: var(--rule-strong) solid var(--color-focus);
+  outline-offset: var(--space-2xs);
+}
+
+.theme-option:has(input:disabled),
+.theme-option[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.theme-option[data-state="loading"] {
+  cursor: progress;
+  border-color: var(--color-rule-strong);
+}
+
+.theme-option[data-state="error"] {
+  border-color: var(--color-error);
+}
+
+.theme-option[data-state="success"] {
+  border-color: var(--color-success);
+}
+
+.theme-option[data-state="loading"] .theme-option__state,
+.theme-option[data-state="error"] .theme-option__state,
+.theme-option[data-state="success"] .theme-option__state {
+  font-size: 0;
+}
+
+.theme-option[data-state="loading"] .theme-option__state::after,
+.theme-option[data-state="error"] .theme-option__state::after,
+.theme-option[data-state="success"] .theme-option__state::after {
+  font-size: var(--text-xs);
+}
+
+.theme-option[data-state="loading"] .theme-option__state::after {
+  content: "適用中";
+}
+
+.theme-option[data-state="error"] .theme-option__state::after {
+  content: "エラー";
+  color: var(--color-error);
+}
+
+.theme-option[data-state="success"] .theme-option__state::after {
+  content: "適用済み";
+  color: var(--color-success);
+}
+
+.theme-settings-status {
+  min-height: 1.5em;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
 }
 
 .import-options {
@@ -1056,6 +1213,9 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
 }
 
 .track-row__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
   min-width: 0;
   background: var(--color-paper);
 }
@@ -1104,6 +1264,36 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.track-learning-action {
+  align-self: stretch;
+  min-width: 4.75rem;
+  padding: var(--space-xs);
+  border: 0;
+  border-inline-start: var(--rule-thin) solid var(--color-rule);
+  background: transparent;
+  color: var(--color-accent);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.track-learning-action[data-state="ready"] {
+  color: var(--color-success);
+}
+
+.track-learning-action[data-state="error"] {
+  color: var(--color-error);
+}
+
+.track-learning-action:disabled {
+  color: var(--color-muted);
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .track-remove {
@@ -1208,6 +1398,7 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
 .loop-point:disabled,
 .field-control:disabled,
 .track-select:disabled,
+.track-learning-action:disabled,
 .track-remove:disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;
@@ -1259,10 +1450,15 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .theme-option:not(:has(input:disabled)):hover {
+    background: var(--color-paper-3);
+  }
+
   .control:not(:disabled):hover,
   .icon-control:not(:disabled):hover,
   .loop-point:not(:disabled):hover,
   .track-select:not(:disabled):hover,
+  .track-learning-action:not(:disabled):hover,
   .track-remove:not(:disabled):hover {
     background: var(--color-paper-3);
     color: var(--color-ink);
@@ -1289,10 +1485,15 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   }
 }
 
+.theme-option:not(:has(input:disabled)):active {
+  transform: translateY(var(--rule-thin));
+}
+
 .control:not(:disabled):active,
 .icon-control:not(:disabled):active,
 .loop-point:not(:disabled):active,
 .track-select:not(:disabled):active,
+.track-learning-action:not(:disabled):active,
 .track-remove:not(:disabled):active {
   transform: translateY(var(--rule-thin));
 }
@@ -1312,6 +1513,16 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
 }
 
 @media (min-width: 40rem) {
+  .nav-edge:has(.install-button:not([hidden])) .wordmark__name,
+  .theme-settings-button > span {
+    display: inline;
+  }
+
+  .theme-settings-button {
+    width: auto;
+    padding-inline: var(--space-md);
+  }
+
   .import-options {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
@@ -1486,6 +1697,7 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   .control,
   .icon-control,
   .field-control,
+  .track-learning-action,
   .track-remove {
     min-height: 3rem;
   }
@@ -1538,6 +1750,10 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .status-m
     animation-duration: 150ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 150ms !important;
+  }
+
+  .theme-option:active {
+    transform: none;
   }
 
 }

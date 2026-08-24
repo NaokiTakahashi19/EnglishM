@@ -1,4 +1,4 @@
-/* Hallmark · tokens: Almanac · paper-band: light · display: roman-serif · accent: warm */
+/* Hallmark · tokens: selectable learning palettes · display: grotesk-sans · accents: warm / cool / leaf / amber */
 :root {
   --color-paper: oklch(96.5% 0.014 82);
   --color-paper-2: oklch(93.5% 0.016 82);
@@ -15,7 +15,7 @@
   --color-success: oklch(42% 0.1 145);
   --color-overlay: oklch(20% 0.018 62 / 0.08);
 
-  --font-display: "Newsreader", "Iowan Old Style", "Palatino Linotype", serif;
+  --font-display: "IBM Plex Sans", "Hiragino Sans", "Yu Gothic", sans-serif;
   --font-body: "IBM Plex Sans", "Hiragino Sans", "Yu Gothic", sans-serif;
   --font-outlier: "IBM Plex Mono", "SFMono-Regular", monospace;
 
@@ -60,4 +60,55 @@
   --z-raised: 10;
   --z-sticky: 200;
   --z-toast: 500;
+}
+
+:root[data-theme="blue"] {
+  --color-paper: oklch(96.5% 0.009 245);
+  --color-paper-2: oklch(93.5% 0.012 245);
+  --color-paper-3: oklch(89.5% 0.015 245);
+  --color-ink: oklch(20% 0.018 245);
+  --color-ink-2: oklch(31% 0.02 245);
+  --color-muted: oklch(42% 0.018 245);
+  --color-rule: oklch(74% 0.018 245);
+  --color-rule-strong: oklch(52% 0.024 245);
+  --color-accent: oklch(47% 0.13 240);
+  --color-accent-ink: oklch(98% 0.006 245);
+  --color-focus: oklch(38% 0.13 240);
+  --color-error: oklch(48% 0.18 24);
+  --color-success: oklch(42% 0.1 145);
+  --color-overlay: oklch(20% 0.018 245 / 0.1);
+}
+
+:root[data-theme="sage"] {
+  --color-paper: oklch(96.5% 0.012 115);
+  --color-paper-2: oklch(93.5% 0.015 115);
+  --color-paper-3: oklch(89.5% 0.018 115);
+  --color-ink: oklch(20% 0.016 145);
+  --color-ink-2: oklch(30% 0.018 145);
+  --color-muted: oklch(41% 0.018 140);
+  --color-rule: oklch(74% 0.02 120);
+  --color-rule-strong: oklch(51% 0.028 135);
+  --color-accent: oklch(44% 0.11 153);
+  --color-accent-ink: oklch(98% 0.008 115);
+  --color-focus: oklch(35% 0.11 153);
+  --color-error: oklch(48% 0.18 24);
+  --color-success: oklch(40% 0.11 145);
+  --color-overlay: oklch(20% 0.016 145 / 0.1);
+}
+
+:root[data-theme="night"] {
+  --color-paper: oklch(15% 0.014 250);
+  --color-paper-2: oklch(19% 0.016 250);
+  --color-paper-3: oklch(23% 0.018 250);
+  --color-ink: oklch(94% 0.01 85);
+  --color-ink-2: oklch(84% 0.012 85);
+  --color-muted: oklch(73% 0.014 85);
+  --color-rule: oklch(35% 0.022 250);
+  --color-rule-strong: oklch(55% 0.026 250);
+  --color-accent: oklch(70% 0.13 70);
+  --color-accent-ink: oklch(18% 0.016 70);
+  --color-focus: oklch(94% 0.01 85);
+  --color-error: oklch(74% 0.14 25);
+  --color-success: oklch(72% 0.11 145);
+  --color-overlay: oklch(5% 0.01 250 / 0.62);
 }

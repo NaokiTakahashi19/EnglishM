@@ -50,6 +50,7 @@ const transcriptSettingsDialog = document.querySelector("#transcript-settings-di
 const transcriptSettingsClose = document.querySelector("#transcript-settings-close");
 const transcriptWorkspaceDialog = document.querySelector("#transcript-workspace-dialog");
 const transcriptWorkspaceClose = document.querySelector("#transcript-workspace-close");
+const transcriptWorkspaceApiSettings = document.querySelector("#transcript-workspace-api-settings");
 const transcriptDisplayModeSelect = document.querySelector("#transcript-display-mode");
 const transcriptShowFromGroup = document.querySelector("#transcript-show-from-group");
 const transcriptShowFromInput = document.querySelector("#transcript-show-from");
@@ -98,6 +99,12 @@ const libraryCount = document.querySelector("#library-count");
 const statusMessage = document.querySelector("#status-message");
 const connectionStatus = document.querySelector("#connection-status");
 const installButton = document.querySelector("#install-button");
+const themeSettingsButton = document.querySelector("#theme-settings-button");
+const themeSettingsDialog = document.querySelector("#theme-settings-dialog");
+const themeSettingsClose = document.querySelector("#theme-settings-close");
+const themeSettingsStatus = document.querySelector("#theme-settings-status");
+const themeInputs = [...document.querySelectorAll('input[name="theme"]')];
+const themeColorMeta = document.querySelector('meta[name="theme-color"]');
 
 const SETTINGS_KEY = "listening-desk:settings";
 const POSITIONS_KEY = "listening-desk:positions";
@@ -114,6 +121,12 @@ const TRANSCRIPTION_API_URL = window.location.hostname.endsWith(".vercel.app")
 const AUDIO_EXTENSIONS = /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i;
 const TRANSCRIPTION_EXTENSIONS = /\.(mp3|mp4|mpeg|mpga|m4a|wav|webm)$/i;
 const MAX_TRANSCRIPTION_FILE_BYTES = 4 * 1024 * 1024;
+const THEME_LABELS = {
+  warm: "ウォーム",
+  blue: "ブルーグレー",
+  sage: "セージ",
+  night: "ナイト",
+};
 
 let tracks = [];
 let currentIndex = -1;
@@ -148,6 +161,7 @@ const settings = {
   pauseRatio: 1.2,
   transcriptVisible: true,
   transcriptShowFrom: 1,
+  theme: "warm",
   ...storedSettings,
 };
 if (!["sequence", "count", "infinite"].includes(settings.playbackMode)) {
@@ -157,6 +171,7 @@ settings.repeatCount = Math.min(99, Math.max(2, Math.round(Number(settings.repea
 settings.transcriptShowFrom = Math.min(99, Math.max(1, Math.round(Number(settings.transcriptShowFrom) || 1)));
 const supportedPauseRatios = [0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.5];
 settings.pauseRatio = supportedPauseRatios.includes(Number(settings.pauseRatio)) ? Number(settings.pauseRatio) : 1.2;
+settings.theme = Object.hasOwn(THEME_LABELS, settings.theme) ? settings.theme : "warm";
 delete settings.repeatOne;
 const positions = readStored(POSITIONS_KEY, {});
 const loops = readStored(LOOPS_KEY, {});
@@ -166,6 +181,7 @@ playbackModeSelect.value = settings.playbackMode;
 repeatCountInput.value = String(settings.repeatCount);
 pauseRatioSelect.value = String(settings.pauseRatio);
 audio.playbackRate = settings.rate;
+applyTheme(settings.theme, { persist: false });
 syncConnectionState();
 syncControls();
 syncPracticeUi();
@@ -186,6 +202,21 @@ function writeStored(key, value) {
   } catch {
     showStatus("設定をこのブラウザに保存できませんでした。再生は続けられます。", "error");
   }
+}
+
+function applyTheme(theme, { persist = true } = {}) {
+  const nextTheme = Object.hasOwn(THEME_LABELS, theme) ? theme : "warm";
+  settings.theme = nextTheme;
+  document.documentElement.dataset.theme = nextTheme;
+  themeInputs.forEach((input) => {
+    input.checked = input.value === nextTheme;
+  });
+  themeSettingsStatus.textContent = `${THEME_LABELS[nextTheme]}を使用中`;
+  themeSettingsButton.setAttribute("aria-label", `${THEME_LABELS[nextTheme]}を使用中。配色を変更`);
+
+  const surfaceColor = getComputedStyle(document.documentElement).getPropertyValue("--color-paper").trim();
+  if (surfaceColor) themeColorMeta.setAttribute("content", surfaceColor);
+  if (persist) writeStored(SETTINGS_KEY, settings);
 }
 
 function getTranslationAccessKey() {
@@ -344,6 +375,35 @@ function deleteStoredTranscript(id) {
   return runTranscriptTransaction("readwrite", (store) => store.delete(id));
 }
 
+function learningStateFromRecord(record) {
+  if (!record?.text) return "needs-transcript";
+  return record.translation ? "ready" : "needs-translation";
+}
+
+function setTrackLearningState(track, record) {
+  if (!track) return;
+  track.learningState = learningStateFromRecord(record);
+}
+
+function updateTrackLearningState(id, record) {
+  const track = tracks.find((candidate) => candidate.id === id);
+  if (!track) return;
+  setTrackLearningState(track, record);
+  renderLibrary();
+}
+
+async function hydrateTrackLearningStates(targetTracks) {
+  await Promise.all(targetTracks.map(async (track) => {
+    try {
+      const record = await getStoredTranscript(track.id);
+      if (tracks.includes(track)) setTrackLearningState(track, record);
+    } catch {
+      if (tracks.includes(track)) track.learningState = "error";
+    }
+  }));
+  renderLibrary();
+}
+
 function fileId(file) {
   return `${file.name}:${file.size}:${file.lastModified}`;
 }
@@ -426,6 +486,7 @@ async function addFiles(fileList, { source = "files" } = {}) {
       file,
       url: URL.createObjectURL(file),
       duration: null,
+      learningState: "checking",
     });
   });
 
@@ -438,6 +499,7 @@ async function addFiles(fileList, { source = "files" } = {}) {
   const firstAddedIndex = tracks.length;
   tracks.push(...added);
   renderLibrary();
+  hydrateTrackLearningStates(added);
   added.forEach(readTrackDuration);
 
   if (currentIndex === -1) selectTrack(firstAddedIndex);
@@ -503,7 +565,7 @@ function selectTrack(index, autoplay = false) {
   syncLoopUi();
   syncControls();
   syncPracticeUi();
-  loadTranscript(track);
+  return loadTranscript(track);
 }
 
 function removeTrack(index) {
@@ -655,6 +717,47 @@ function renderLibrary() {
 
     selectButton.append(name, meta);
 
+    const learningAction = document.createElement("button");
+    learningAction.className = "track-learning-action";
+    learningAction.type = "button";
+    const isTranscribing = transcribingTrackId === track.id;
+    const isTranslating = translatingTrackId === track.id;
+    const learningState = isTranscribing
+      ? "transcribing"
+      : (isTranslating ? "translating" : track.learningState);
+
+    if (learningState === "checking") {
+      learningAction.textContent = "確認中";
+      learningAction.disabled = true;
+    } else if (learningState === "transcribing") {
+      learningAction.textContent = "英文中…";
+      learningAction.disabled = true;
+    } else if (learningState === "translating") {
+      learningAction.textContent = "和訳中…";
+      learningAction.disabled = true;
+    } else if (learningState === "needs-transcript") {
+      learningAction.textContent = "＋英文";
+      learningAction.setAttribute("aria-label", `${track.file.name}の英文を生成`);
+    } else if (learningState === "needs-translation") {
+      learningAction.textContent = "＋和訳";
+      learningAction.setAttribute("aria-label", `${track.file.name}の日本語訳を生成`);
+    } else if (learningState === "ready") {
+      learningAction.textContent = "文・訳 ✓";
+      learningAction.dataset.state = "ready";
+      learningAction.setAttribute("aria-label", `${track.file.name}の英文と日本語訳を表示・編集`);
+    } else {
+      learningAction.textContent = "再確認";
+      learningAction.dataset.state = "error";
+      learningAction.setAttribute("aria-label", `${track.file.name}の保存状態を再確認`);
+    }
+    if ((transcribingTrackId || translatingTrackId) && !isTranscribing && !isTranslating) {
+      learningAction.disabled = true;
+    }
+
+    learningAction.addEventListener("click", () => {
+      handleTrackLearningAction(index);
+    });
+
     const removeButton = document.createElement("button");
     removeButton.className = "track-remove";
     removeButton.type = "button";
@@ -662,7 +765,7 @@ function renderLibrary() {
     removeButton.textContent = "削除";
     removeButton.addEventListener("click", () => removeTrack(index));
 
-    content.append(selectButton);
+    content.append(selectButton, learningAction);
     item.append(content, removeButton);
     enableSwipeToRemove(item, content);
     trackList.append(item);
@@ -670,6 +773,34 @@ function renderLibrary() {
 
   const currentRow = trackList.querySelector('.track-row[data-current="true"]');
   if (currentRow) window.requestAnimationFrame(() => keepCurrentTrackVisible(currentRow));
+}
+
+async function handleTrackLearningAction(index) {
+  const track = tracks[index];
+  if (!track || transcribingTrackId || translatingTrackId) return;
+
+  if (track.learningState === "error") {
+    track.learningState = "checking";
+    renderLibrary();
+    await hydrateTrackLearningStates([track]);
+    return;
+  }
+
+  if (index !== currentIndex) {
+    await selectTrack(index, false);
+  } else if (track.learningState !== "needs-transcript" && activeTranscriptRecord?.id !== track.id) {
+    await loadTranscript(track);
+  }
+  if (currentTrack()?.id !== track.id) return;
+
+  if (track.learningState === "needs-transcript") {
+    await startTranscription();
+  } else if (track.learningState === "needs-translation") {
+    revealTranscriptWorkspace();
+    startTranslation(activeTranscriptRecord, true);
+  } else if (track.learningState === "ready") {
+    revealTranscriptEditor();
+  }
 }
 
 function keepCurrentTrackVisible(currentRow) {
@@ -1134,11 +1265,12 @@ async function loadTranscript(track) {
       showTranscriptButton.disabled = false;
       transcriptStatus.dataset.state = "success";
       transcriptStatus.textContent = "この音声の保存済みスクリプトを表示しています。";
+      updateTrackLearningState(track.id, record);
       renderSynchronizedTranscript(record.words || []);
       renderTranslation(record.translation || "");
-      if (!record.translation && getTranslationAccessKey()) startTranslation(record);
     } else {
       activeTranscriptRecord = null;
+      updateTrackLearningState(track.id, null);
       delete transcriptOutput.dataset.state;
       delete transcriptStatus.dataset.state;
       transcriptStatus.textContent = "まだスクリプトはありません。API設定の共通アクセスキーで生成できます。";
@@ -1147,6 +1279,8 @@ async function loadTranscript(track) {
     }
   } catch {
     if (currentTrack()?.id !== track.id) return;
+    track.learningState = "error";
+    renderLibrary();
     transcriptOutput.dataset.state = "error";
     transcriptStatus.dataset.state = "error";
     transcriptStatus.textContent = "保存領域を読み込めませんでした。ブラウザのプライベートモードを解除してください。";
@@ -1179,6 +1313,7 @@ async function startTranscription() {
   }
 
   transcribingTrackId = track.id;
+  renderLibrary();
   transcribeButton.disabled = true;
   transcribeButton.dataset.state = "loading";
   transcribeButton.setAttribute("aria-busy", "true");
@@ -1235,6 +1370,7 @@ async function startTranscription() {
       storageError.code = "storage_failed";
       throw storageError;
     }
+    updateTrackLearningState(track.id, record);
     if (currentTrack()?.id === track.id) {
       activeTranscriptRecord = record;
       transcriptOutput.value = text;
@@ -1243,14 +1379,13 @@ async function startTranscription() {
       deleteTranscriptButton.disabled = false;
       showTranscriptButton.disabled = false;
       transcriptStatus.dataset.state = "success";
-      transcriptStatus.textContent = "英文を生成し、このブラウザに保存しました。日本語訳も続けて生成します。";
+      transcriptStatus.textContent = "英文を生成し、このブラウザに保存しました。再生リストから和訳も生成できます。";
       renderSynchronizedTranscript(record.words);
       renderTranslation("");
       revealTranscriptEditor();
     } else {
       showStatus(`${track.file.name}の英語スクリプトを保存しました。`);
     }
-    startTranslation(record);
   } catch (error) {
     console.error("OpenAI transcription failed:", error);
     const reportedError = error?.name === "AbortError"
@@ -1310,6 +1445,7 @@ function startTranslation(record, force = false) {
     return;
   }
   translatingTrackId = record.id;
+  renderLibrary();
   if (currentTrack()?.id === record.id) {
     translationPanel.hidden = false;
     translateButton.disabled = true;
@@ -1368,6 +1504,7 @@ async function requestOpenAITranslation({ purpose, id, key = "", text }) {
           translatedAt: new Date().toISOString(),
         };
     await putStoredTranscript(updatedRecord);
+    updateTrackLearningState(id, updatedRecord);
     if (currentTrack()?.id === id) activeTranscriptRecord = updatedRecord;
 
     if (purpose === "word") {
@@ -1391,12 +1528,10 @@ async function requestOpenAITranslation({ purpose, id, key = "", text }) {
       translatingWordKeys.delete(requestKey);
     } else {
       translatingTrackId = null;
+      renderLibrary();
       if (currentTrack()?.id === id) {
         translateButton.disabled = false;
         renderCurrentTranslation();
-      }
-      if (activeTranscriptRecord?.id !== id && activeTranscriptRecord?.text && !activeTranscriptRecord.translation) {
-        startTranslation(activeTranscriptRecord);
       }
     }
   }
@@ -1419,6 +1554,7 @@ function showTranslationError(id, message = "OpenAI APIで日本語訳を生成�
 
 function finishTranscription() {
   transcribingTrackId = null;
+  renderLibrary();
   transcribeButton.disabled = !currentTrack();
   delete transcribeButton.dataset.state;
   transcribeButton.removeAttribute("aria-busy");
@@ -1460,9 +1596,9 @@ async function saveTranscript() {
     transcriptStatus.textContent = textChanged
       ? "修正したスクリプトを保存しました。単語同期は再生成すると利用できます。"
       : "スクリプトを保存しました。";
+    updateTrackLearningState(track.id, record);
     renderSynchronizedTranscript(record.words);
     renderTranslation(record.translation);
-    if (!record.translation && getTranslationAccessKey()) startTranslation(record);
     window.setTimeout(() => delete saveTranscriptButton.dataset.state, 1200);
   } catch {
     transcriptOutput.dataset.state = "error";
@@ -1485,6 +1621,7 @@ async function removeStoredTranscript() {
     showTranscriptButton.disabled = true;
     delete transcriptStatus.dataset.state;
     transcriptStatus.textContent = "保存済みスクリプトを削除しました。音声から再生成できます。";
+    updateTrackLearningState(track.id, null);
     renderSynchronizedTranscript([]);
     renderTranslation("");
     syncTranscriptVisibility();
@@ -1730,6 +1867,18 @@ if (!folderSelectionSupported) {
   folderSupportNote.textContent = "このブラウザはフォルダ選択に対応していません。複数ファイルを選んで追加してください。";
 }
 
+themeSettingsButton.addEventListener("click", () => {
+  const selectedTheme = themeInputs.find((input) => input.checked) || themeInputs[0];
+  openSettingsDialog(themeSettingsDialog, selectedTheme);
+});
+themeSettingsClose.addEventListener("click", () => themeSettingsDialog.close());
+themeInputs.forEach((input) => {
+  input.addEventListener("change", () => {
+    if (input.checked) applyTheme(input.value);
+  });
+});
+closeSettingsOnBackdrop(themeSettingsDialog);
+
 filePickerButton.addEventListener("click", () => openSettingsDialog(importDialog, chooseFilesButton));
 importDialogClose.addEventListener("click", () => importDialog.close());
 chooseFilesButton.addEventListener("click", () => {
@@ -1868,9 +2017,6 @@ translationSettingsForm.addEventListener("submit", async (event) => {
   translationSettingsDialog.close();
   showStatus("共通アクセスキーを確認して保存しました。", "success");
   renderTranslation(activeTranscriptRecord?.translation || "");
-  if (activeTranscriptRecord?.text && !activeTranscriptRecord.translation) {
-    startTranslation(activeTranscriptRecord, true);
-  }
 });
 transcriptDisplaySettingsButton.addEventListener("click", () => openSettingsDialog(transcriptDisplayDialog, transcriptDisplayModeSelect));
 transcriptSettingsButton.addEventListener("click", () => {
@@ -1880,6 +2026,10 @@ transcriptSettingsButton.addEventListener("click", () => {
   openSettingsDialog(transcriptSettingsDialog, firstContentAction);
 });
 transcriptSettingsClose.addEventListener("click", () => transcriptSettingsDialog.close());
+transcriptWorkspaceApiSettings.addEventListener("click", () => {
+  transcriptWorkspaceDialog.close();
+  openTranslationSettings();
+});
 transcriptWorkspaceClose.addEventListener("click", () => transcriptWorkspaceDialog.close());
 transcriptDisplayClose.addEventListener("click", () => transcriptDisplayDialog.close());
 closeSettingsOnBackdrop(transcriptSettingsDialog);
