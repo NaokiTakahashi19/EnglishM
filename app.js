@@ -1,8 +1,14 @@
 const audio = document.querySelector("#audio");
 const fileInput = document.querySelector("#file-input");
+const folderInput = document.querySelector("#folder-input");
 const fileAction = document.querySelector("#file-action");
-const filePickerLabel = document.querySelector("#file-picker-label");
+const filePickerButton = document.querySelector("#file-picker-button");
 const filePickerText = document.querySelector("#file-picker-text");
+const importDialog = document.querySelector("#import-dialog");
+const importDialogClose = document.querySelector("#import-dialog-close");
+const chooseFilesButton = document.querySelector("#choose-files-button");
+const chooseFolderButton = document.querySelector("#choose-folder-button");
+const folderSupportNote = document.querySelector("#folder-support-note");
 const seek = document.querySelector("#seek");
 const currentTimeLabel = document.querySelector("#current-time");
 const durationLabel = document.querySelector("#duration");
@@ -236,11 +242,10 @@ function syncTranscriptVisibility() {
   }
 }
 
-function revealTranscriptEditor({ focus = false } = {}) {
+function revealTranscriptWorkspace({ focusEditor = false } = {}) {
   const track = currentTrack();
-  if (!track || !transcriptOutput.value.trim()) return;
+  if (!track) return;
   transcriptEditorForcedTrackId = track.id;
-  showTranscriptButton.disabled = false;
   syncTranscriptVisibility();
   if (transcriptSettingsDialog.open) transcriptSettingsDialog.close();
   window.requestAnimationFrame(() => {
@@ -248,8 +253,14 @@ function revealTranscriptEditor({ focus = false } = {}) {
       block: "start",
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
     });
-    if (focus) transcriptOutput.focus({ preventScroll: true });
+    if (focusEditor && transcriptOutput.value.trim()) transcriptOutput.focus({ preventScroll: true });
   });
+}
+
+function revealTranscriptEditor({ focus = false } = {}) {
+  if (!currentTrack() || !transcriptOutput.value.trim()) return;
+  showTranscriptButton.disabled = false;
+  revealTranscriptWorkspace({ focusEditor: focus });
 }
 
 function openTranscriptDatabase() {
@@ -298,6 +309,15 @@ function isAudioFile(file) {
   return file.type.startsWith("audio/") || AUDIO_EXTENSIONS.test(file.name);
 }
 
+function fileSortPath(file) {
+  return file.webkitRelativePath || file.name;
+}
+
+function fileFolderPath(file) {
+  const parts = String(file.webkitRelativePath || "").split("/").filter(Boolean);
+  return parts.length > 1 ? parts.slice(0, -1).join(" / ") : "";
+}
+
 function formatTime(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
   const whole = Math.floor(seconds);
@@ -321,24 +341,34 @@ function showStatus(message, tone = "info") {
 
 function setImportState(state) {
   fileAction.dataset.state = state;
-  filePickerLabel.dataset.state = state;
-  if (state === "loading") filePickerLabel.setAttribute("aria-busy", "true");
-  else filePickerLabel.removeAttribute("aria-busy");
+  filePickerButton.dataset.state = state;
+  if (state === "loading") filePickerButton.setAttribute("aria-busy", "true");
+  else filePickerButton.removeAttribute("aria-busy");
   window.setTimeout(() => {
     if (fileAction.dataset.state === state) delete fileAction.dataset.state;
-    if (filePickerLabel.dataset.state === state) delete filePickerLabel.dataset.state;
+    if (filePickerButton.dataset.state === state) delete filePickerButton.dataset.state;
   }, state === "error" ? 3000 : 1200);
 }
 
-async function addFiles(fileList) {
+async function addFiles(fileList, { source = "files" } = {}) {
   setImportState("loading");
-  const candidates = [...fileList]
+  const selectedFiles = [...fileList];
+  const candidates = selectedFiles
     .filter(isAudioFile)
-    .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }));
+    .sort((left, right) => fileSortPath(left).localeCompare(
+      fileSortPath(right),
+      undefined,
+      { numeric: true, sensitivity: "base" },
+    ));
 
   if (candidates.length === 0) {
     setImportState("error");
-    showStatus("再生できる音声ファイルが見つかりませんでした。MP3やM4Aを選んでください。", "error");
+    showStatus(
+      source === "folder"
+        ? "選択したフォルダに再生できる音声がありません。MP3やM4Aを含むフォルダを選んでください。"
+        : "再生できる音声ファイルが見つかりませんでした。MP3やM4Aを選んでください。",
+      "error",
+    );
     return;
   }
 
@@ -371,15 +401,19 @@ async function addFiles(fileList) {
 
   setImportState("success");
   const skippedCount = candidates.length - added.length;
+  const ignoredCount = selectedFiles.length - candidates.length;
+  const addedFrom = source === "folder" ? "フォルダから" : "";
+  const details = [
+    skippedCount > 0 ? `重複${skippedCount}件を除外` : "",
+    ignoredCount > 0 ? `音声以外${ignoredCount}件を除外` : "",
+  ].filter(Boolean).join("、");
   showStatus(
-    skippedCount > 0
-      ? `${added.length}件を追加しました。重複${skippedCount}件は除外しました。`
-      : `${added.length}件を再生リストに追加しました。`,
+    `${addedFrom}${added.length}件を再生リストに追加しました。${details ? `${details}しました。` : ""}`,
   );
 }
 
 function syncFilePickerUi() {
-  filePickerText.textContent = tracks.length > 0 ? "音声を追加" : "音声を選ぶ";
+  filePickerText.textContent = "音声を追加";
 }
 
 function readTrackDuration(track) {
@@ -569,7 +603,9 @@ function renderLibrary() {
 
     const meta = document.createElement("span");
     meta.className = "track-select__meta";
-    meta.textContent = track.duration ? formatTime(track.duration) : "長さを確認中";
+    const folderPath = fileFolderPath(track.file);
+    const durationText = track.duration ? formatTime(track.duration) : "長さを確認中";
+    meta.textContent = folderPath ? `${folderPath} · ${durationText}` : durationText;
 
     selectButton.append(name, meta);
 
@@ -983,21 +1019,24 @@ async function startTranscription() {
   const track = currentTrack();
   if (!track || transcribingTrackId) return;
 
+  showTranscriptButton.disabled = !transcriptOutput.value.trim();
+  revealTranscriptWorkspace();
+
   const accessKey = getTranslationAccessKey();
   if (!accessKey) {
     transcriptOutput.dataset.state = "error";
     transcriptStatus.dataset.state = "error";
-    transcriptStatus.textContent = "英文生成にはAPI設定の共通アクセスキーが必要です。";
-    if (transcriptSettingsDialog.open) transcriptSettingsDialog.close();
+    transcriptStatus.textContent = "英文を生成できませんでした。先にAPI設定の共通アクセスキーを保存してください。";
+    showStatus(transcriptStatus.textContent, "error");
     openTranslationSettings();
     return;
   }
   if (!TRANSCRIPTION_EXTENSIONS.test(track.file.name)) {
-    finishTranscriptionWithError("英文生成はMP3、M4A、WAV、WEBMなどの音声に対応しています。");
+    finishTranscriptionWithError("英文を生成できませんでした。MP3、M4A、WAV、WEBMなどの音声を選んでください。");
     return;
   }
   if (track.file.size > MAX_TRANSCRIPTION_FILE_BYTES) {
-    finishTranscriptionWithError("英文生成できる音声は4MBまでです。短く分けてから試してください。");
+    finishTranscriptionWithError("英文を生成できませんでした。音声は4MBまでです。短く分けてから試してください。");
     return;
   }
 
@@ -1007,7 +1046,10 @@ async function startTranscription() {
   transcribeButton.setAttribute("aria-busy", "true");
   transcriptOutput.dataset.state = "loading";
   transcriptStatus.dataset.state = "loading";
-  transcriptStatus.textContent = "OpenAI APIで英文と単語時刻を生成しています。";
+  transcriptStatus.textContent = "音声を送信し、OpenAI APIで英文と単語時刻を生成しています。完了までこの画面でお待ちください。";
+
+  const requestController = new AbortController();
+  const requestTimeout = window.setTimeout(() => requestController.abort(), 90_000);
 
   try {
     const response = await fetch(TRANSCRIPTION_API_URL, {
@@ -1019,6 +1061,7 @@ async function startTranscription() {
         "X-Audio-Type": track.file.type || "application/octet-stream",
       },
       body: track.file,
+      signal: requestController.signal,
     });
     let payload = {};
     try {
@@ -1029,11 +1072,12 @@ async function startTranscription() {
     if (!response.ok) {
       const error = new Error(payload.error || "Transcription request failed");
       error.status = response.status;
+      error.code = payload.code || "";
       throw error;
     }
     const text = String(payload.text || "").trim();
     if (!text) {
-      finishTranscriptionWithError("英語を検出できませんでした。音量を確認してもう一度試してください。");
+      finishTranscriptionWithError("英文を生成できませんでした。英語を検出できないため、音量を確認してもう一度試してください。");
       return;
     }
 
@@ -1046,7 +1090,13 @@ async function startTranscription() {
       source: payload.source || "openai-whisper-1",
       updatedAt: new Date().toISOString(),
     };
-    await putStoredTranscript(record);
+    try {
+      await putStoredTranscript(record);
+    } catch {
+      const storageError = new Error("Transcript storage failed");
+      storageError.code = "storage_failed";
+      throw storageError;
+    }
     if (currentTrack()?.id === track.id) {
       activeTranscriptRecord = record;
       transcriptOutput.value = text;
@@ -1065,18 +1115,45 @@ async function startTranscription() {
     startTranslation(record);
   } catch (error) {
     console.error("OpenAI transcription failed:", error);
-    finishTranscriptionWithError(transcriptionErrorMessage(error));
+    const reportedError = error?.name === "AbortError"
+      ? Object.assign(new Error("Transcription request timed out"), { code: "request_timeout" })
+      : error;
+    finishTranscriptionWithError(transcriptionErrorMessage(reportedError));
   } finally {
+    window.clearTimeout(requestTimeout);
     if (transcribingTrackId === track.id) finishTranscription();
   }
 }
 
 function transcriptionErrorMessage(error) {
-  if (error?.status === 401) return "共通アクセスキーが正しくありません。API設定を確認してください。";
-  if (error?.status === 413) return "音声ファイルが大きすぎます。短く分けてから試してください。";
-  if (error?.status === 429) return "英文生成の利用回数が上限に達しました。少し待ってから試してください。";
-  if (error?.status === 503) return "サーバーのOpenAI API設定が完了していません。";
-  return "OpenAI APIで英文を生成できませんでした。通信状態を確認してください。";
+  if (error?.code === "storage_failed") {
+    return "英文は生成されましたが、このブラウザに保存できませんでした。空き容量とプライベートモードを確認してください。";
+  }
+  if (error?.code === "request_timeout") {
+    return "英文を生成できませんでした。処理が90秒以内に完了しなかったため、短い音声で再度お試しください。";
+  }
+  if (error?.status === 400 || error?.code === "unsupported_audio_format" || error?.code === "invalid_audio_body") {
+    return "英文を生成できませんでした。音声形式またはファイル内容を確認してください。";
+  }
+  if (error?.status === 401 || error?.code === "invalid_access_key") {
+    return "英文を生成できませんでした。共通アクセスキーが正しくありません。API設定を確認してください。";
+  }
+  if (error?.status === 413 || error?.code === "audio_too_large") {
+    return "英文を生成できませんでした。音声ファイルが大きすぎます。短く分けてから試してください。";
+  }
+  if (error?.status === 429) {
+    return "英文を生成できませんでした。利用回数が上限に達しました。少し待ってから試してください。";
+  }
+  if (error?.status === 502) {
+    return "英文を生成できませんでした。OpenAI APIが音声を処理できませんでした。音声形式を確認して再度お試しください。";
+  }
+  if (error?.status === 503 || error?.code === "service_not_configured") {
+    return "英文を生成できませんでした。サーバーのOpenAI API設定が完了していません。";
+  }
+  if (!navigator.onLine) {
+    return "英文を生成できませんでした。オフラインです。通信接続後にもう一度お試しください。";
+  }
+  return "英文を生成できませんでした。生成サーバーに接続できません。通信状態を確認して再度お試しください。";
 }
 
 function startTranslation(record, force = false) {
@@ -1210,6 +1287,9 @@ function finishTranscriptionWithError(message) {
   transcriptOutput.dataset.state = "error";
   transcriptStatus.dataset.state = "error";
   transcriptStatus.textContent = message;
+  showTranscriptButton.disabled = !transcriptOutput.value.trim();
+  revealTranscriptWorkspace();
+  showStatus(message, "error");
 }
 
 async function saveTranscript() {
@@ -1451,8 +1531,32 @@ function syncConnectionState() {
   connectionStatus.textContent = navigator.onLine ? "オンライン" : "オフラインで利用中";
 }
 
+const folderSelectionSupported = "webkitdirectory" in folderInput;
+if (!folderSelectionSupported) {
+  chooseFolderButton.disabled = true;
+  folderSupportNote.textContent = "このブラウザはフォルダ選択に対応していません。複数ファイルを選んで追加してください。";
+}
+
+filePickerButton.addEventListener("click", () => openSettingsDialog(importDialog, chooseFilesButton));
+importDialogClose.addEventListener("click", () => importDialog.close());
+chooseFilesButton.addEventListener("click", () => {
+  importDialog.close();
+  fileInput.click();
+});
+chooseFolderButton.addEventListener("click", () => {
+  if (!folderSelectionSupported) return;
+  importDialog.close();
+  folderInput.click();
+});
+closeSettingsOnBackdrop(importDialog);
+
 fileInput.addEventListener("change", async (event) => {
-  await addFiles(event.target.files);
+  await addFiles(event.target.files, { source: "files" });
+  event.target.value = "";
+});
+
+folderInput.addEventListener("change", async (event) => {
+  await addFiles(event.target.files, { source: "folder" });
   event.target.value = "";
 });
 

@@ -387,6 +387,23 @@ h3 {
   gap: var(--space-lg);
 }
 
+.import-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-sm);
+}
+
+.import-options .control {
+  width: 100%;
+  padding-inline: var(--space-sm);
+}
+
+.import-support-note {
+  min-height: 1lh;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
 .practice-modes,
 .practice-settings {
   display: grid;
@@ -900,10 +917,12 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
 .track-select__meta {
   display: block;
   margin-block-start: var(--space-2xs);
+  overflow: clip;
   color: var(--color-muted);
   font-family: var(--font-body);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
