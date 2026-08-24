@@ -58,6 +58,12 @@ const deleteTranscriptButton = document.querySelector("#delete-transcript-button
 const transcriptStatus = document.querySelector("#transcript-status");
 const syncScript = document.querySelector("#sync-script");
 const syncTranscript = document.querySelector("#sync-transcript");
+const currentTranslationButton = document.querySelector("#current-translation-button");
+const currentTranslationDialog = document.querySelector("#current-translation-dialog");
+const currentTranslationOutput = document.querySelector("#current-translation-output");
+const currentTranslationStatus = document.querySelector("#current-translation-status");
+const currentTranslationGenerate = document.querySelector("#current-translation-generate");
+const currentTranslationClose = document.querySelector("#current-translation-close");
 const translationPanel = document.querySelector("#translation-panel");
 const translationOutput = document.querySelector("#translation-output");
 const translationStatus = document.querySelector("#translation-status");
@@ -481,6 +487,7 @@ function readTrackDuration(track) {
 function selectTrack(index, autoplay = false) {
   if (!tracks[index]) return;
   if (wordDialog.open) wordDialog.close();
+  if (currentTranslationDialog.open) currentTranslationDialog.close();
   cancelPracticePause(false);
   saveCurrentPosition();
   audio.pause();
@@ -531,6 +538,8 @@ function removeTrack(index) {
 }
 
 function resetPlayer() {
+  if (wordDialog.open) wordDialog.close();
+  if (currentTranslationDialog.open) currentTranslationDialog.close();
   cancelPracticePause(false);
   seek.value = "0";
   seek.max = "0";
@@ -818,7 +827,10 @@ function renderSynchronizedTranscript(words) {
   syncWordButtons = [];
   activeSyncWordIndex = -1;
   syncScript.hidden = normalizedWords.length === 0;
-  if (normalizedWords.length === 0) return;
+  if (normalizedWords.length === 0) {
+    renderCurrentTranslation();
+    return;
+  }
 
   normalizedWords.forEach((word, index) => {
     const button = document.createElement("button");
@@ -832,6 +844,7 @@ function renderSynchronizedTranscript(words) {
     syncWordButtons.push(button);
     syncTranscript.append(button);
   });
+  renderCurrentTranslation();
   updateTranscriptHighlight();
 }
 
@@ -852,6 +865,38 @@ function renderTranslation(text) {
       ? "日本語訳はOpenAI APIで生成します。"
       : "";
     delete translationStatus.dataset.state;
+  }
+  renderCurrentTranslation(translation);
+}
+
+function renderCurrentTranslation(text = activeTranscriptRecord?.translation || "") {
+  const hasTranscript = Boolean(activeTranscriptRecord?.text);
+  const translation = String(text || "").trim();
+  const isTranslating = hasTranscript && translatingTrackId === activeTranscriptRecord?.id;
+
+  currentTranslationButton.disabled = !hasTranscript;
+  currentTranslationButton.textContent = translation
+    ? "日本語訳を見る"
+    : (isTranslating ? "日本語訳を生成中" : "日本語訳を生成");
+  currentTranslationOutput.textContent = translation || "まだ日本語訳はありません。";
+  currentTranslationGenerate.hidden = Boolean(translation);
+  currentTranslationGenerate.disabled = !hasTranscript || isTranslating;
+
+  delete currentTranslationStatus.dataset.state;
+  if (translation) {
+    currentTranslationStatus.textContent = "この音声に保存されている日本語訳です。";
+  } else if (isTranslating) {
+    currentTranslationStatus.dataset.state = "loading";
+    currentTranslationStatus.textContent = "OpenAI APIで日本語訳を生成しています。";
+  } else if (translationStatus.dataset.state === "error" && translationStatus.textContent) {
+    currentTranslationStatus.dataset.state = "error";
+    currentTranslationStatus.textContent = translationStatus.textContent;
+  } else if (hasTranscript && !getTranslationAccessKey()) {
+    currentTranslationStatus.textContent = "生成するには、共通API設定が必要です。";
+  } else {
+    currentTranslationStatus.textContent = hasTranscript
+      ? "生成すると、このブラウザに保存されます。"
+      : "先に英語スクリプトを生成してください。";
   }
 }
 
@@ -897,8 +942,8 @@ function keepActiveWordVisible(activeButton) {
 }
 
 function openWordDialog() {
-  if (typeof wordDialog.showModal === "function") {
-    if (!wordDialog.open) wordDialog.showModal();
+  if (typeof wordDialog.show === "function") {
+    if (!wordDialog.open) wordDialog.show();
   } else {
     wordDialog.setAttribute("open", "");
   }
@@ -1216,6 +1261,7 @@ function startTranslation(record, force = false) {
     translateButton.disabled = true;
     translationStatus.dataset.state = "loading";
     translationStatus.textContent = "OpenAI APIで日本語訳を生成しています。";
+    renderCurrentTranslation();
   }
   requestOpenAITranslation({ purpose: "full", id: record.id, text: record.text });
 }
@@ -1291,7 +1337,10 @@ async function requestOpenAITranslation({ purpose, id, key = "", text }) {
       translatingWordKeys.delete(requestKey);
     } else {
       translatingTrackId = null;
-      if (currentTrack()?.id === id) translateButton.disabled = false;
+      if (currentTrack()?.id === id) {
+        translateButton.disabled = false;
+        renderCurrentTranslation();
+      }
       if (activeTranscriptRecord?.id !== id && activeTranscriptRecord?.text && !activeTranscriptRecord.translation) {
         startTranslation(activeTranscriptRecord);
       }
@@ -1640,6 +1689,22 @@ showTranscriptButton.addEventListener("click", () => revealTranscriptEditor({ fo
 saveTranscriptButton.addEventListener("click", saveTranscript);
 deleteTranscriptButton.addEventListener("click", removeStoredTranscript);
 translateButton.addEventListener("click", () => startTranslation(activeTranscriptRecord, true));
+currentTranslationButton.addEventListener("click", () => {
+  if (!activeTranscriptRecord?.text) return;
+  renderCurrentTranslation();
+  openSettingsDialog(currentTranslationDialog, currentTranslationClose);
+});
+currentTranslationGenerate.addEventListener("click", () => {
+  if (!activeTranscriptRecord?.text) return;
+  if (!getTranslationAccessKey()) {
+    currentTranslationDialog.close();
+    openTranslationSettings();
+    return;
+  }
+  startTranslation(activeTranscriptRecord, true);
+  renderCurrentTranslation();
+});
+currentTranslationClose.addEventListener("click", () => currentTranslationDialog.close());
 translationSettingsButton.addEventListener("click", () => {
   if (transcriptSettingsDialog.open) transcriptSettingsDialog.close();
   openTranslationSettings();
@@ -1715,6 +1780,7 @@ transcriptDisplayClose.addEventListener("click", () => transcriptDisplayDialog.c
 closeSettingsOnBackdrop(transcriptSettingsDialog);
 closeSettingsOnBackdrop(transcriptWorkspaceDialog);
 closeSettingsOnBackdrop(transcriptDisplayDialog);
+closeSettingsOnBackdrop(currentTranslationDialog);
 transcriptDisplayModeSelect.addEventListener("change", () => {
   settings.transcriptVisible = transcriptDisplayModeSelect.value === "show";
   if (!settings.transcriptVisible) transcriptEditorForcedTrackId = null;
@@ -1761,6 +1827,13 @@ playWordButton.addEventListener("click", async () => {
 
 wordDialog.addEventListener("close", () => {
   selectedWord = null;
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (!wordDialog.open || wordDialog.contains(event.target)) return;
+  const target = event.target instanceof Element ? event.target : null;
+  if (target?.closest(".sync-word")) return;
+  wordDialog.close();
 });
 
 playbackModeSelect.addEventListener("change", () => {
@@ -1863,6 +1936,11 @@ audio.addEventListener("error", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && wordDialog.open) {
+    event.preventDefault();
+    wordDialog.close();
+    return;
+  }
   const target = event.target;
   const isTyping = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement;
   if (isTyping || event.metaKey || event.ctrlKey || event.altKey) return;

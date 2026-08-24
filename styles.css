@@ -620,6 +620,22 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   border-block-end: var(--rule-thin) solid var(--color-rule);
 }
 
+.sync-script__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.sync-translation-button {
+  flex: 0 0 auto;
+  min-height: 2rem;
+  padding-inline: var(--space-xs);
+  white-space: nowrap;
+  font-size: var(--text-xs);
+}
+
 .sync-script h4,
 .translation-panel h4 {
   font-family: var(--font-display);
@@ -727,6 +743,19 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   background: color-mix(in oklch, var(--color-overlay) 62%, transparent);
 }
 
+.word-translation-dialog {
+  inset-block-start: max(var(--space-md), env(safe-area-inset-top));
+  inset-block-end: auto;
+  z-index: calc(var(--z-sticky) + 1);
+  max-height: min(48dvh, 24rem);
+  margin-block: 0;
+}
+
+.word-translation-dialog .word-dialog__inner {
+  gap: var(--space-md);
+  padding: var(--space-lg);
+}
+
 .word-dialog__inner {
   display: grid;
   gap: var(--space-lg);
@@ -749,6 +778,15 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   min-height: 1.6em;
   font-size: var(--text-lg);
   line-height: 1.5;
+}
+
+.current-translation-output {
+  max-height: 48dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  white-space: pre-wrap;
+  font-size: var(--text-md);
+  line-height: 1.8;
 }
 
 .translation-settings-dialog__note {
