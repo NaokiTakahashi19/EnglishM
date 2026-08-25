@@ -13,7 +13,7 @@
  * contrast: pass (40–41, 49)
  */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · slop: pass (1–58) */
-@import url("./tokens.css?v=40");
+@import url("./tokens.css?v=41");
 
 *,
 *::before,
@@ -404,17 +404,19 @@ h3 {
 
 .learning-settings {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-xs);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2xs);
   padding-block: var(--space-md);
   border-block-start: var(--rule-thin) solid var(--color-rule);
 }
 
 .setting-chip {
+  flex-direction: column;
+  gap: var(--space-3xs);
   width: 100%;
   min-width: 0;
   height: calc(var(--size-touch) + var(--space-sm));
-  padding-inline: var(--space-sm);
+  padding-inline: var(--space-2xs);
   font-size: var(--text-sm);
   font-weight: 700;
   justify-content: center;
@@ -745,10 +747,11 @@ h3 {
     max(var(--space-xs), env(safe-area-inset-bottom)) + var(--size-touch) + var(--space-lg) + var(--space-sm)
   );
   z-index: var(--z-sticky);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, auto);
   width: auto;
   max-width: 30rem;
-  height: clamp(7rem, 20dvh, 9rem);
+  height: auto;
+  max-height: calc(var(--space-4xl) + var(--space-2xl) + var(--space-lg));
   margin-inline: auto;
   padding: 0;
   overflow: clip;
@@ -759,7 +762,7 @@ h3 {
 }
 
 body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-pane {
-  padding-block-end: calc(var(--space-xl) * 3 + var(--space-4xl));
+  padding-block-end: calc(var(--space-4xl) + var(--space-4xl) + var(--space-2xl));
 }
 
 .sync-script__heading,
@@ -817,8 +820,11 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   flex-wrap: wrap;
   align-content: start;
   gap: var(--space-2xs);
-  min-height: 0;
-  height: 100%;
+  min-height: calc(var(--size-touch) + var(--space-sm));
+  height: auto;
+  max-height: calc(
+    var(--space-4xl) + var(--space-lg) + var(--space-sm) + var(--space-xs)
+  );
   padding: var(--space-sm);
   overflow: auto;
   overscroll-behavior: contain;
@@ -1123,6 +1129,19 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   min-height: var(--size-touch);
 }
 
+.library-actions {
+  display: grid;
+  flex: 0 0 auto;
+  gap: var(--space-2xs);
+  justify-items: stretch;
+}
+
+.add-next-five,
+.file-picker {
+  min-width: 0;
+  white-space: nowrap;
+}
+
 .library-heading h2 {
   font-family: var(--font-display);
   font-size: var(--text-md);
@@ -1182,7 +1201,16 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
 
 .track-list {
   display: grid;
-  max-height: clamp(7rem, 22dvh, 10rem);
+  grid-auto-rows: 4.5rem;
+  align-content: start;
+  height: calc(
+    var(--size-touch) + var(--size-touch) + var(--size-touch) +
+    var(--space-lg) + var(--space-lg) + var(--space-lg) + var(--space-sm)
+  );
+  max-height: calc(
+    var(--size-touch) + var(--size-touch) + var(--size-touch) +
+    var(--space-lg) + var(--space-lg) + var(--space-lg) + var(--space-sm)
+  );
   margin: var(--space-sm) 0 0;
   padding: 0;
   overflow-y: auto;
@@ -1190,6 +1218,10 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   scrollbar-gutter: stable;
   list-style: none;
   border-block-start: var(--rule-thin) solid var(--color-rule);
+}
+
+.track-list:empty {
+  display: none;
 }
 
 .track-row {
@@ -1573,6 +1605,18 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
 
   .learning-settings {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: var(--space-xs);
+  }
+
+  .setting-chip {
+    flex-direction: row;
+    gap: var(--space-xs);
+    padding-inline: var(--space-sm);
+  }
+
+  .library-actions {
+    display: flex;
+    align-items: center;
   }
 
   .translation-panel__heading {
@@ -1714,6 +1758,7 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   }
 
   .track-list {
+    height: auto;
     max-height: none;
     overflow: visible;
     scrollbar-gutter: auto;

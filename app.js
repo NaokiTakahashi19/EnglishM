@@ -4,6 +4,7 @@ const folderInput = document.querySelector("#folder-input");
 const fileAction = document.querySelector("#file-action");
 const filePickerButton = document.querySelector("#file-picker-button");
 const filePickerText = document.querySelector("#file-picker-text");
+const addNextFiveButton = document.querySelector("#add-next-five-button");
 const importDialog = document.querySelector("#import-dialog");
 const importDialogClose = document.querySelector("#import-dialog-close");
 const chooseFilesButton = document.querySelector("#choose-files-button");
@@ -154,6 +155,8 @@ let activeSyncWordIndex = -1;
 let selectedWord = null;
 let transcriptEditorForcedTrackId = null;
 let openSwipeRow = null;
+let lastSelectedFolderFiles = [];
+let pendingFolderAddMode = "all";
 
 const storedSettings = readStored(SETTINGS_KEY, {});
 const settings = {
@@ -419,6 +422,19 @@ function fileSortPath(file) {
   return file.webkitRelativePath || file.name;
 }
 
+function compareFileNames(left, right) {
+  return String(left).localeCompare(String(right), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function sortedAudioFiles(fileList) {
+  return [...fileList]
+    .filter(isAudioFile)
+    .sort((left, right) => compareFileNames(fileSortPath(left), fileSortPath(right)));
+}
+
 function fileFolderPath(file) {
   const parts = String(file.webkitRelativePath || "").split("/").filter(Boolean);
   return parts.length > 1 ? parts.slice(0, -1).join(" / ") : "";
@@ -448,29 +464,31 @@ function showStatus(message, tone = "info") {
 function setImportState(state) {
   fileAction.dataset.state = state;
   filePickerButton.dataset.state = state;
-  if (state === "loading") filePickerButton.setAttribute("aria-busy", "true");
-  else filePickerButton.removeAttribute("aria-busy");
+  addNextFiveButton.dataset.state = state;
+  if (state === "loading") {
+    filePickerButton.setAttribute("aria-busy", "true");
+    addNextFiveButton.setAttribute("aria-busy", "true");
+  } else {
+    filePickerButton.removeAttribute("aria-busy");
+    addNextFiveButton.removeAttribute("aria-busy");
+  }
   window.setTimeout(() => {
     if (fileAction.dataset.state === state) delete fileAction.dataset.state;
     if (filePickerButton.dataset.state === state) delete filePickerButton.dataset.state;
+    if (addNextFiveButton.dataset.state === state) delete addNextFiveButton.dataset.state;
   }, state === "error" ? 3000 : 1200);
 }
 
 async function addFiles(fileList, { source = "files" } = {}) {
   setImportState("loading");
   const selectedFiles = [...fileList];
-  const candidates = selectedFiles
-    .filter(isAudioFile)
-    .sort((left, right) => fileSortPath(left).localeCompare(
-      fileSortPath(right),
-      undefined,
-      { numeric: true, sensitivity: "base" },
-    ));
+  const candidates = sortedAudioFiles(selectedFiles);
+  const fromFolder = source === "folder" || source === "next-five";
 
   if (candidates.length === 0) {
     setImportState("error");
     showStatus(
-      source === "folder"
+      fromFolder
         ? "選択したフォルダに再生できる音声がありません。MP3やM4Aを含むフォルダを選んでください。"
         : "再生できる音声ファイルが見つかりませんでした。MP3やM4Aを選んでください。",
       "error",
@@ -510,7 +528,9 @@ async function addFiles(fileList, { source = "files" } = {}) {
   setImportState("success");
   const skippedCount = candidates.length - added.length;
   const ignoredCount = selectedFiles.length - candidates.length;
-  const addedFrom = source === "folder" ? "フォルダから" : "";
+  const addedFrom = source === "folder"
+    ? "フォルダから"
+    : (source === "next-five" ? "フォルダから続きの" : "");
   const details = [
     skippedCount > 0 ? `重複${skippedCount}件を除外` : "",
     ignoredCount > 0 ? `音声以外${ignoredCount}件を除外` : "",
@@ -518,6 +538,47 @@ async function addFiles(fileList, { source = "files" } = {}) {
   showStatus(
     `${addedFrom}${added.length}件を再生リストに追加しました。${details ? `${details}しました。` : ""}`,
   );
+}
+
+function nextFilesFromLastFolder(limit = 5) {
+  if (lastSelectedFolderFiles.length === 0) return [];
+
+  const knownIds = new Set(tracks.map((track) => track.id));
+  const largestTrackName = tracks.reduce((largest, track) => (
+    !largest || compareFileNames(track.file.name, largest) > 0 ? track.file.name : largest
+  ), "");
+
+  return lastSelectedFolderFiles
+    .filter((file) => !knownIds.has(fileId(file)))
+    .filter((file) => !largestTrackName || compareFileNames(file.name, largestTrackName) > 0)
+    .sort((left, right) => compareFileNames(left.name, right.name))
+    .slice(0, limit);
+}
+
+function requestFolderSelection(mode) {
+  pendingFolderAddMode = mode;
+  folderInput.click();
+}
+
+async function addNextFiveFromLastFolder() {
+  if (!folderSelectionSupported) {
+    showStatus("このブラウザはフォルダからの続き追加に対応していません。複数ファイルを選んで追加してください。", "error");
+    return;
+  }
+
+  if (lastSelectedFolderFiles.length === 0) {
+    requestFolderSelection("next-five");
+    return;
+  }
+
+  const nextFiles = nextFilesFromLastFolder(5);
+  if (nextFiles.length === 0) {
+    setImportState("error");
+    showStatus("現在の最大ファイル名より後に追加できる音声はありません。", "error");
+    return;
+  }
+
+  await addFiles(nextFiles, { source: "next-five" });
 }
 
 function syncFilePickerUi() {
@@ -808,13 +869,25 @@ async function handleTrackLearningAction(index) {
 
 function keepCurrentTrackVisible(currentRow) {
   if (!currentRow || trackList.clientHeight === 0) return;
+  const rows = [...trackList.querySelectorAll(".track-row")];
+  const currentPosition = rows.indexOf(currentRow);
+  if (currentPosition < 0) return;
+
+  const visibleCount = Math.min(3, rows.length);
+  const startPosition = Math.max(
+    0,
+    Math.min(currentPosition - 1, rows.length - visibleCount),
+  );
+  const firstContextRow = rows[startPosition];
+  const lastContextRow = rows[startPosition + visibleCount - 1];
   const listRect = trackList.getBoundingClientRect();
-  const rowRect = currentRow.getBoundingClientRect();
+  const firstRect = firstContextRow.getBoundingClientRect();
+  const lastRect = lastContextRow.getBoundingClientRect();
   const inset = 4;
-  if (rowRect.top >= listRect.top + inset && rowRect.bottom <= listRect.bottom - inset) return;
-  const offset = rowRect.top - listRect.top - (trackList.clientHeight - rowRect.height) / 2;
-  trackList.scrollBy({
-    top: offset,
+  if (firstRect.top >= listRect.top + inset && lastRect.bottom <= listRect.bottom - inset) return;
+  const targetTop = trackList.scrollTop + firstRect.top - listRect.top;
+  trackList.scrollTo({
+    top: Math.max(0, targetTop),
     behavior: "auto",
   });
 }
@@ -1867,6 +1940,7 @@ function syncConnectionState() {
 const folderSelectionSupported = "webkitdirectory" in folderInput;
 if (!folderSelectionSupported) {
   chooseFolderButton.disabled = true;
+  addNextFiveButton.disabled = true;
   folderSupportNote.textContent = "このブラウザはフォルダ選択に対応していません。複数ファイルを選んで追加してください。";
 }
 
@@ -1895,9 +1969,10 @@ chooseFilesButton.addEventListener("click", () => {
 chooseFolderButton.addEventListener("click", () => {
   if (!folderSelectionSupported) return;
   importDialog.close();
-  folderInput.click();
+  requestFolderSelection("all");
 });
 closeSettingsOnBackdrop(importDialog);
+addNextFiveButton.addEventListener("click", addNextFiveFromLastFolder);
 
 fileInput.addEventListener("change", async (event) => {
   await addFiles(event.target.files, { source: "files" });
@@ -1905,7 +1980,15 @@ fileInput.addEventListener("change", async (event) => {
 });
 
 folderInput.addEventListener("change", async (event) => {
-  await addFiles(event.target.files, { source: "folder" });
+  const selectedFiles = [...event.target.files];
+  lastSelectedFolderFiles = sortedAudioFiles(selectedFiles);
+  const addMode = pendingFolderAddMode;
+  pendingFolderAddMode = "all";
+  if (addMode === "next-five" && lastSelectedFolderFiles.length > 0) {
+    await addNextFiveFromLastFolder();
+  } else {
+    await addFiles(selectedFiles, { source: addMode === "next-five" ? "next-five" : "folder" });
+  }
   event.target.value = "";
 });
 

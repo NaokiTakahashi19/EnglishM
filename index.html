@@ -26,7 +26,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=40" />
+    <link rel="stylesheet" href="./styles.css?v=41" />
     <title>Listening Desk — 英語音声プレイヤー</title>
   </head>
   <body>
@@ -504,38 +504,48 @@
               <p id="library-count">0件</p>
               <p class="library-swipe-hint">左へスワイプして削除</p>
             </div>
-            <div class="file-action" id="file-action">
-              <input
-                id="file-input"
-                type="file"
-                accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac"
-                multiple
-                aria-hidden="true"
-                tabindex="-1"
-                hidden
-              />
-              <input
-                id="folder-input"
-                type="file"
-                accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac"
-                webkitdirectory
-                directory
-                multiple
-                aria-hidden="true"
-                tabindex="-1"
-                hidden
-              />
+            <div class="library-actions">
               <button
-                class="control control--primary file-picker"
-                id="file-picker-button"
+                class="control control--quiet add-next-five"
+                id="add-next-five-button"
                 type="button"
-                aria-haspopup="dialog"
+                aria-label="直前に選んだフォルダから続きの5音声を追加"
               >
-                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v5h14v-5" />
-                </svg>
-                <span id="file-picker-text">音声を追加</span>
+                5音声追加
               </button>
+              <div class="file-action" id="file-action">
+                <input
+                  id="file-input"
+                  type="file"
+                  accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac"
+                  multiple
+                  aria-hidden="true"
+                  tabindex="-1"
+                  hidden
+                />
+                <input
+                  id="folder-input"
+                  type="file"
+                  accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac"
+                  webkitdirectory
+                  directory
+                  multiple
+                  aria-hidden="true"
+                  tabindex="-1"
+                  hidden
+                />
+                <button
+                  class="control control--primary file-picker"
+                  id="file-picker-button"
+                  type="button"
+                  aria-haspopup="dialog"
+                >
+                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v5h14v-5" />
+                  </svg>
+                  <span id="file-picker-text">音声を追加</span>
+                </button>
+              </div>
             </div>
           </div>
           <dialog class="word-dialog settings-dialog" id="import-dialog" aria-labelledby="import-dialog-title" tabindex="-1">
@@ -554,7 +564,7 @@
                   <li><strong>Android</strong><span>最初の音声を長押しし、残りをタップして「選択」。</span></li>
                 </ul>
               </div>
-              <p class="import-support-note" id="folder-support-note">フォルダを選ぶと、中の対応音声を名前順にまとめて追加します。</p>
+              <p class="import-support-note" id="folder-support-note">フォルダを選ぶと、中の対応音声を名前順にまとめて追加します。「5音声追加」は、同じ画面を開いている間、最後に選んだフォルダから続きの5件を追加します。</p>
               <div class="word-dialog__actions">
                 <button class="control control--text" id="import-dialog-close" type="button">閉じる</button>
               </div>
@@ -620,6 +630,6 @@
 
     <div class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./app.js?v=40"></script>
+    <script type="module" src="./app.js?v=41"></script>
   </body>
 </html>
