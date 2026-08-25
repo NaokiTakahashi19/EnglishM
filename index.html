@@ -26,7 +26,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=41" />
+    <link rel="stylesheet" href="./styles.css?v=42" />
     <title>Listening Desk — 英語音声プレイヤー</title>
   </head>
   <body>
@@ -99,7 +99,7 @@
 
       <section class="workbench reveal" style="--i: 0" aria-label="音声プレイヤー">
         <div class="player-pane">
-          <audio id="audio" preload="metadata"></audio>
+          <audio id="audio" preload="metadata" playsinline></audio>
 
           <div class="timeline">
             <label class="visually-hidden" for="seek">再生位置</label>
@@ -630,6 +630,6 @@
 
     <div class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./app.js?v=41"></script>
+    <script type="module" src="./app.js?v=42"></script>
   </body>
 </html>

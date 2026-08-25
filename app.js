@@ -672,6 +672,17 @@ function resetPlayer() {
   durationLabel.textContent = "0:00";
   playButton.dataset.playing = "false";
   playButton.setAttribute("aria-label", "再生");
+  if ("mediaSession" in navigator) {
+    navigator.mediaSession.playbackState = "none";
+    navigator.mediaSession.metadata = null;
+    if (typeof navigator.mediaSession.setPositionState === "function") {
+      try {
+        navigator.mediaSession.setPositionState();
+      } catch {
+        // Some mobile browsers expose Media Session without position state support.
+      }
+    }
+  }
   syncLoopUi();
   syncPracticeUi();
   resetTranscriptPanel();
@@ -1832,25 +1843,31 @@ function toggleLoop() {
   syncLoopUi();
 }
 
-async function togglePlayback() {
+async function startPlayback() {
   if (!currentTrack()) return;
-  if (audio.paused) {
-    if (isPracticePause && pendingPracticeTargetIndex >= 0) {
-      const nextIndex = pendingPracticeTargetIndex;
-      cancelPracticePause(false);
-      activatePracticeTarget(nextIndex, true);
-      return;
-    }
-    cancelPracticePause();
-    try {
-      await audio.play();
-    } catch {
-      showStatus("音声を再生できませんでした。別のファイル形式を試してください。", "error");
-    }
-  } else {
-    cancelPracticePause();
-    audio.pause();
+  if (isPracticePause && pendingPracticeTargetIndex >= 0) {
+    const nextIndex = pendingPracticeTargetIndex;
+    cancelPracticePause(false);
+    activatePracticeTarget(nextIndex, true);
+    return;
   }
+  cancelPracticePause();
+  try {
+    await audio.play();
+  } catch {
+    showStatus("音声を再生できませんでした。別のファイル形式を試してください。", "error");
+  }
+}
+
+function pausePlayback() {
+  cancelPracticePause();
+  audio.pause();
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+}
+
+async function togglePlayback() {
+  if (audio.paused) await startPlayback();
+  else pausePlayback();
 }
 
 function skipBy(seconds) {
@@ -1872,6 +1889,22 @@ function goToNext(autoplay = !audio.paused) {
   else if (tracks.length > 0) selectTrack(0, autoplay);
 }
 
+function changeTrackFromMediaControl(direction) {
+  if (!currentTrack() || tracks.length === 0) return;
+  const autoplay = !audio.paused || navigator.mediaSession?.playbackState === "playing";
+  cancelPracticePause(false);
+  const targetIndex = (currentIndex + direction + tracks.length) % tracks.length;
+
+  if (targetIndex !== currentIndex) {
+    selectTrack(targetIndex, autoplay);
+    return;
+  }
+
+  audio.currentTime = 0;
+  updateTimeline();
+  if (autoplay && audio.paused) startPlayback();
+}
+
 function updateTimeline() {
   const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
   seek.max = String(duration);
@@ -1880,6 +1913,7 @@ function updateTimeline() {
   seek.style.setProperty("--progress", `${progress}%`);
   currentTimeLabel.textContent = formatTime(audio.currentTime);
   durationLabel.textContent = formatTime(duration);
+  updateMediaSessionPosition();
   updateTranscriptHighlight();
 
   const loop = currentLoop();
@@ -1904,6 +1938,7 @@ function saveCurrentPosition() {
 
 function updateMediaSession(track) {
   if (!("mediaSession" in navigator) || !("MediaMetadata" in window)) return;
+  setupMediaSessionActionHandlers();
   navigator.mediaSession.metadata = new MediaMetadata({
     title: track.file.name.replace(/\.[^.]+$/, ""),
     artist: "Listening Desk",
@@ -1912,6 +1947,63 @@ function updateMediaSession(track) {
       { src: new URL("./icons/app-icon-192.png", location.href).href, sizes: "192x192", type: "image/png" },
       { src: new URL("./icons/app-icon-512.png", location.href).href, sizes: "512x512", type: "image/png" },
     ],
+  });
+  updateMediaSessionPosition();
+}
+
+function updateMediaSessionPosition() {
+  if (!("mediaSession" in navigator) || typeof navigator.mediaSession.setPositionState !== "function") return;
+  const duration = Number(audio.duration);
+  const position = Number(audio.currentTime);
+  try {
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(position)) {
+      navigator.mediaSession.setPositionState();
+      return;
+    }
+    navigator.mediaSession.setPositionState({
+      duration,
+      playbackRate: Math.max(0.1, Number(audio.playbackRate) || 1),
+      position: Math.min(duration, Math.max(0, position)),
+    });
+  } catch {
+    // Some mobile browsers expose Media Session without position state support.
+  }
+}
+
+function stopFromMediaControl() {
+  pausePlayback();
+  if (currentTrack()) {
+    audio.currentTime = 0;
+    updateTimeline();
+  }
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+}
+
+function setupMediaSessionActionHandlers() {
+  if (!("mediaSession" in navigator)) return;
+
+  ["seekbackward", "seekforward", "seekto"].forEach((action) => {
+    try {
+      navigator.mediaSession.setActionHandler(action, null);
+    } catch {
+      // Unsupported Media Session actions are safe to ignore.
+    }
+  });
+
+  const handlers = {
+    play: startPlayback,
+    pause: pausePlayback,
+    previoustrack: () => changeTrackFromMediaControl(-1),
+    nexttrack: () => changeTrackFromMediaControl(1),
+    stop: stopFromMediaControl,
+  };
+
+  Object.entries(handlers).forEach(([action, handler]) => {
+    try {
+      navigator.mediaSession.setActionHandler(action, handler);
+    } catch {
+      // Unsupported Media Session actions are safe to ignore.
+    }
   });
 }
 
@@ -2243,9 +2335,11 @@ audio.addEventListener("timeupdate", updateTimeline);
 audio.addEventListener("durationchange", updateTimeline);
 audio.addEventListener("ratechange", () => {
   if (audio.playbackRate !== settings.rate) audio.playbackRate = settings.rate;
+  updateMediaSessionPosition();
 });
 
 audio.addEventListener("play", () => {
+  setupMediaSessionActionHandlers();
   playButton.dataset.playing = "true";
   playButton.setAttribute("aria-label", "一時停止");
   if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
@@ -2343,27 +2437,7 @@ window.addEventListener("appinstalled", () => {
   showStatus("ホーム画面に追加しました。オフラインでも起動できます。");
 });
 
-if ("mediaSession" in navigator) {
-  const handlers = {
-    play: togglePlayback,
-    pause: () => audio.pause(),
-    seekbackward: (details) => skipBy(-(details.seekOffset || 10)),
-    seekforward: (details) => skipBy(details.seekOffset || 5),
-    previoustrack: goToPrevious,
-    nexttrack: () => goToNext(true),
-    seekto: (details) => {
-      if (Number.isFinite(details.seekTime)) audio.currentTime = details.seekTime;
-    },
-  };
-
-  Object.entries(handlers).forEach(([action, handler]) => {
-    try {
-      navigator.mediaSession.setActionHandler(action, handler);
-    } catch {
-      // Unsupported Media Session actions are safe to ignore.
-    }
-  });
-}
+setupMediaSessionActionHandlers();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
