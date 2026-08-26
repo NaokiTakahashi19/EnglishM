@@ -125,6 +125,8 @@ const TRANSCRIPTION_API_URL = window.location.hostname.endsWith(".vercel.app")
 const AUDIO_EXTENSIONS = /\.(mp3|m4a|aac|wav|ogg|opus|flac)$/i;
 const TRANSCRIPTION_EXTENSIONS = /\.(mp3|mp4|mpeg|mpga|m4a|wav|webm)$/i;
 const MAX_TRANSCRIPTION_FILE_BYTES = 4 * 1024 * 1024;
+const MEDIA_SEEK_BACKWARD_SECONDS = 10;
+const MEDIA_SEEK_FORWARD_SECONDS = 5;
 const THEME_LABELS = {
   warm: "ウォーム",
   blue: "ブルーグレー",
@@ -192,6 +194,7 @@ syncConnectionState();
 syncControls();
 syncPracticeUi();
 syncTranscriptVisibility();
+setupMediaSessionActionHandlers();
 
 function readStored(key, fallback) {
   try {
@@ -673,7 +676,7 @@ function resetPlayer() {
   playButton.dataset.playing = "false";
   playButton.setAttribute("aria-label", "再生");
   if ("mediaSession" in navigator) {
-    navigator.mediaSession.playbackState = "none";
+    setMediaSessionPlaybackState("none");
     navigator.mediaSession.metadata = null;
     if (typeof navigator.mediaSession.setPositionState === "function") {
       try {
@@ -1862,7 +1865,7 @@ async function startPlayback() {
 function pausePlayback() {
   cancelPracticePause();
   audio.pause();
-  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+  setMediaSessionPlaybackState("paused");
 }
 
 async function togglePlayback() {
@@ -1873,6 +1876,7 @@ async function togglePlayback() {
 function skipBy(seconds) {
   if (!currentTrack() || !Number.isFinite(audio.duration)) return;
   audio.currentTime = Math.min(audio.duration, Math.max(0, audio.currentTime + seconds));
+  updateTimeline();
 }
 
 function goToPrevious() {
@@ -1937,18 +1941,30 @@ function saveCurrentPosition() {
 }
 
 function updateMediaSession(track) {
-  if (!("mediaSession" in navigator) || !("MediaMetadata" in window)) return;
+  if (!("mediaSession" in navigator)) return;
   setupMediaSessionActionHandlers();
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title: track.file.name.replace(/\.[^.]+$/, ""),
-    artist: "Listening Desk",
-    album: "英語学習",
-    artwork: [
-      { src: new URL("./icons/app-icon-192.png", location.href).href, sizes: "192x192", type: "image/png" },
-      { src: new URL("./icons/app-icon-512.png", location.href).href, sizes: "512x512", type: "image/png" },
-    ],
-  });
+  if ("MediaMetadata" in window) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.file.name.replace(/\.[^.]+$/, ""),
+      artist: "Listening Desk",
+      album: "英語学習",
+      artwork: [
+        { src: new URL("./icons/app-icon-192.png", location.href).href, sizes: "192x192", type: "image/png" },
+        { src: new URL("./icons/app-icon-512.png", location.href).href, sizes: "512x512", type: "image/png" },
+      ],
+    });
+  }
+  setMediaSessionPlaybackState(audio.paused ? "paused" : "playing");
   updateMediaSessionPosition();
+}
+
+function setMediaSessionPlaybackState(state) {
+  if (!("mediaSession" in navigator)) return;
+  try {
+    navigator.mediaSession.playbackState = state;
+  } catch {
+    // Some browsers expose Media Session with only partial state support.
+  }
 }
 
 function updateMediaSessionPosition() {
@@ -1976,25 +1992,20 @@ function stopFromMediaControl() {
     audio.currentTime = 0;
     updateTimeline();
   }
-  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+  setMediaSessionPlaybackState("paused");
 }
 
 function setupMediaSessionActionHandlers() {
   if (!("mediaSession" in navigator)) return;
 
-  ["seekbackward", "seekforward", "seekto"].forEach((action) => {
-    try {
-      navigator.mediaSession.setActionHandler(action, null);
-    } catch {
-      // Unsupported Media Session actions are safe to ignore.
-    }
-  });
-
   const handlers = {
-    play: startPlayback,
+    play: () => startPlayback(),
     pause: pausePlayback,
     previoustrack: () => changeTrackFromMediaControl(-1),
     nexttrack: () => changeTrackFromMediaControl(1),
+    seekbackward: (details) => seekFromMediaControl(details, -1),
+    seekforward: (details) => seekFromMediaControl(details, 1),
+    seekto: seekToFromMediaControl,
     stop: stopFromMediaControl,
   };
 
@@ -2005,6 +2016,33 @@ function setupMediaSessionActionHandlers() {
       // Unsupported Media Session actions are safe to ignore.
     }
   });
+}
+
+function seekFromMediaControl(details, direction) {
+  const requestedOffset = Number(details?.seekOffset);
+  const fallbackOffset = direction < 0 ? MEDIA_SEEK_BACKWARD_SECONDS : MEDIA_SEEK_FORWARD_SECONDS;
+  const offset = Number.isFinite(requestedOffset) && requestedOffset > 0
+    ? requestedOffset
+    : fallbackOffset;
+  skipBy(direction * offset);
+}
+
+function seekToFromMediaControl(details) {
+  if (!currentTrack() || !Number.isFinite(audio.duration)) return;
+  const requestedTime = Number(details?.seekTime);
+  if (!Number.isFinite(requestedTime)) return;
+  const targetTime = Math.min(audio.duration, Math.max(0, requestedTime));
+
+  if (details?.fastSeek && typeof audio.fastSeek === "function") {
+    try {
+      audio.fastSeek(targetTime);
+    } catch {
+      audio.currentTime = targetTime;
+    }
+  } else {
+    audio.currentTime = targetTime;
+  }
+  updateTimeline();
 }
 
 async function requestWakeLock() {
@@ -2324,6 +2362,7 @@ audio.addEventListener("loadedmetadata", () => {
     audio.currentTime = savedPosition;
   }
   updateTimeline();
+  updateMediaSession(track);
   renderLibrary();
   if (pendingAutoplay) {
     pendingAutoplay = false;
@@ -2342,7 +2381,7 @@ audio.addEventListener("play", () => {
   setupMediaSessionActionHandlers();
   playButton.dataset.playing = "true";
   playButton.setAttribute("aria-label", "一時停止");
-  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+  setMediaSessionPlaybackState("playing");
   requestWakeLock();
   syncPracticeUi();
 });
@@ -2350,7 +2389,7 @@ audio.addEventListener("play", () => {
 audio.addEventListener("pause", () => {
   playButton.dataset.playing = "false";
   playButton.setAttribute("aria-label", "再生");
-  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+  setMediaSessionPlaybackState("paused");
   saveCurrentPosition();
   releaseWakeLock();
 });
@@ -2404,7 +2443,15 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && !audio.paused) requestWakeLock();
+  if (document.visibilityState !== "visible") return;
+  setupMediaSessionActionHandlers();
+  if (currentTrack()) updateMediaSession(currentTrack());
+  if (!audio.paused) requestWakeLock();
+});
+
+window.addEventListener("pageshow", () => {
+  setupMediaSessionActionHandlers();
+  if (currentTrack()) updateMediaSession(currentTrack());
 });
 
 window.addEventListener("beforeunload", () => {
