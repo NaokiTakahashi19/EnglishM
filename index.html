@@ -26,7 +26,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=42" />
+    <link rel="stylesheet" href="./styles.css?v=43" />
     <title>Listening Desk — 英語音声プレイヤー</title>
   </head>
   <body>
@@ -388,40 +388,41 @@
 
             <dialog class="word-dialog transcript-workspace-dialog" id="transcript-workspace-dialog" aria-labelledby="transcript-workspace-title" tabindex="-1">
               <div class="word-dialog__inner">
-                <p class="word-dialog__label">英語スクリプト / 日本語訳</p>
-                <h3 id="transcript-workspace-title">表示・編集</h3>
-                <p class="settings-dialog__note">英文の確認・修正・保存と、日本語訳の生成をこの画面で行います。</p>
-
-                <label class="visually-hidden" for="transcript-output">生成または編集した英語スクリプト</label>
-                <textarea
-                  class="transcript-output"
-                  id="transcript-output"
-                  rows="8"
-                  placeholder="音声を選び「音声から生成」を押すと、英文がここに表示されます。"
-                  disabled
-                ></textarea>
-
-              <div class="transcript-actions">
-                <button class="control control--quiet" id="save-transcript-button" type="button" disabled>修正を保存</button>
-                <button class="control control--text" id="delete-transcript-button" type="button" disabled>保存内容を削除</button>
-              </div>
-              <p class="transcript-status" id="transcript-status" aria-live="polite">
-                API設定の共通アクセスキーを、英文生成と日本語訳の両方に使用します。
-              </p>
-              <section class="translation-panel" id="translation-panel" aria-labelledby="translation-title" hidden>
-                <div class="translation-panel__heading">
-                  <h4 id="translation-title">日本語訳</h4>
-                  <div class="translation-panel__actions">
-                    <button class="control control--text" id="translate-button" type="button">日本語訳を生成</button>
+                <header class="transcript-workspace-toolbar">
+                  <p class="word-dialog__label" id="transcript-workspace-title" aria-label="英語スクリプト / 日本語訳">英文 / 日本語訳</p>
+                  <div class="transcript-workspace-toolbar__actions">
+                    <button class="control control--text" id="transcript-workspace-api-settings" type="button">API設定</button>
+                    <button class="control control--primary" id="transcript-workspace-close" type="button">閉じる</button>
                   </div>
-                </div>
-                <p class="translation-output" id="translation-output"></p>
-                <p class="translation-status" id="translation-status" aria-live="polite"></p>
-              </section>
-                <div class="word-dialog__actions transcript-workspace-dialog__footer">
-                  <button class="control control--text" id="transcript-workspace-api-settings" type="button">API設定</button>
-                  <button class="control control--primary" id="transcript-workspace-close" type="button">閉じる</button>
-                </div>
+                </header>
+
+                <section class="transcript-language-panel" aria-labelledby="transcript-editor-title">
+                  <div class="transcript-language-panel__heading">
+                    <h3 id="transcript-editor-title">英語スクリプト</h3>
+                    <button class="control control--quiet" id="save-transcript-button" type="button" disabled>保存</button>
+                  </div>
+                  <label class="visually-hidden" for="transcript-output">生成または編集した英語スクリプト</label>
+                  <textarea
+                    class="transcript-output"
+                    id="transcript-output"
+                    rows="5"
+                    placeholder="音声から生成すると、英文がここに表示されます。"
+                    disabled
+                  ></textarea>
+                  <div class="transcript-language-panel__meta">
+                    <button class="control control--text" id="delete-transcript-button" type="button" disabled>英文を削除</button>
+                    <p class="transcript-status" id="transcript-status" aria-live="polite"></p>
+                  </div>
+                </section>
+
+                <section class="translation-panel transcript-language-panel" id="translation-panel" aria-labelledby="translation-title" hidden>
+                  <div class="transcript-language-panel__heading">
+                    <h3 id="translation-title">日本語訳</h3>
+                    <button class="control control--quiet" id="translate-button" type="button">日本語訳を生成</button>
+                  </div>
+                  <p class="translation-output" id="translation-output"></p>
+                  <p class="translation-status" id="translation-status" aria-live="polite"></p>
+                </section>
               </div>
             </dialog>
           </section>
@@ -630,6 +631,6 @@
 
     <div class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./app.js?v=42"></script>
+    <script type="module" src="./app.js?v=43"></script>
   </body>
 </html>
