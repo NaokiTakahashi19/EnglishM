@@ -4,6 +4,7 @@ const folderInput = document.querySelector("#folder-input");
 const fileAction = document.querySelector("#file-action");
 const filePickerButton = document.querySelector("#file-picker-button");
 const filePickerText = document.querySelector("#file-picker-text");
+const restoreLibraryButton = document.querySelector("#restore-library-button");
 const addNextFiveButton = document.querySelector("#add-next-five-button");
 const importDialog = document.querySelector("#import-dialog");
 const importDialogClose = document.querySelector("#import-dialog-close");
@@ -115,6 +116,8 @@ const POSITIONS_KEY = "listening-desk:positions";
 const LOOPS_KEY = "listening-desk:loops";
 const TRANSCRIPT_DB_NAME = "listening-desk";
 const TRANSCRIPT_STORE_NAME = "transcripts";
+const APP_STATE_STORE_NAME = "app-state";
+const PLAYLIST_STATE_KEY = "playlist";
 const TRANSLATION_ACCESS_KEY = "listening-desk:translation-access-key";
 const TRANSLATION_API_URL = window.location.hostname.endsWith(".vercel.app")
   ? new URL("/api/translate", window.location.origin).href
@@ -157,7 +160,10 @@ let activeSyncWordIndex = -1;
 let selectedWord = null;
 let transcriptEditorForcedTrackId = null;
 let openSwipeRow = null;
-let lastSelectedFolderFiles = [];
+let lastSelectedFolderEntries = [];
+let lastSelectedDirectoryHandle = null;
+let pendingPlaylistRecord = null;
+let suppressPlaylistPersistence = false;
 let pendingFolderAddMode = "all";
 
 const storedSettings = readStored(SETTINGS_KEY, {});
@@ -348,10 +354,13 @@ function revealTranscriptEditor({ focus = false } = {}) {
 
 function openTranscriptDatabase() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(TRANSCRIPT_DB_NAME, 1);
+    const request = indexedDB.open(TRANSCRIPT_DB_NAME, 2);
     request.addEventListener("upgradeneeded", () => {
       if (!request.result.objectStoreNames.contains(TRANSCRIPT_STORE_NAME)) {
         request.result.createObjectStore(TRANSCRIPT_STORE_NAME, { keyPath: "id" });
+      }
+      if (!request.result.objectStoreNames.contains(APP_STATE_STORE_NAME)) {
+        request.result.createObjectStore(APP_STATE_STORE_NAME, { keyPath: "key" });
       }
     });
     request.addEventListener("success", () => resolve(request.result));
@@ -359,11 +368,11 @@ function openTranscriptDatabase() {
   });
 }
 
-async function runTranscriptTransaction(mode, operation) {
+async function runDatabaseTransaction(storeName, mode, operation) {
   const database = await openTranscriptDatabase();
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction(TRANSCRIPT_STORE_NAME, mode);
-    const store = transaction.objectStore(TRANSCRIPT_STORE_NAME);
+    const transaction = database.transaction(storeName, mode);
+    const store = transaction.objectStore(storeName);
     const request = operation(store);
     request.addEventListener("success", () => resolve(request.result));
     request.addEventListener("error", () => reject(request.error));
@@ -373,15 +382,27 @@ async function runTranscriptTransaction(mode, operation) {
 }
 
 function getStoredTranscript(id) {
-  return runTranscriptTransaction("readonly", (store) => store.get(id));
+  return runDatabaseTransaction(TRANSCRIPT_STORE_NAME, "readonly", (store) => store.get(id));
 }
 
 function putStoredTranscript(record) {
-  return runTranscriptTransaction("readwrite", (store) => store.put(record));
+  return runDatabaseTransaction(TRANSCRIPT_STORE_NAME, "readwrite", (store) => store.put(record));
 }
 
 function deleteStoredTranscript(id) {
-  return runTranscriptTransaction("readwrite", (store) => store.delete(id));
+  return runDatabaseTransaction(TRANSCRIPT_STORE_NAME, "readwrite", (store) => store.delete(id));
+}
+
+function getStoredAppState(key) {
+  return runDatabaseTransaction(APP_STATE_STORE_NAME, "readonly", (store) => store.get(key));
+}
+
+function putStoredAppState(record) {
+  return runDatabaseTransaction(APP_STATE_STORE_NAME, "readwrite", (store) => store.put(record));
+}
+
+function deleteStoredAppState(key) {
+  return runDatabaseTransaction(APP_STATE_STORE_NAME, "readwrite", (store) => store.delete(key));
 }
 
 function learningStateFromRecord(record) {
@@ -425,6 +446,10 @@ function fileSortPath(file) {
   return file.webkitRelativePath || file.name;
 }
 
+function entrySortPath(entry) {
+  return entry.relativePath || fileSortPath(entry.file);
+}
+
 function compareFileNames(left, right) {
   return String(left).localeCompare(String(right), undefined, {
     numeric: true,
@@ -432,15 +457,111 @@ function compareFileNames(left, right) {
   });
 }
 
-function sortedAudioFiles(fileList) {
-  return [...fileList]
-    .filter(isAudioFile)
-    .sort((left, right) => compareFileNames(fileSortPath(left), fileSortPath(right)));
+function sortedAudioEntries(entries) {
+  return [...entries]
+    .filter((entry) => isAudioFile(entry.file))
+    .sort((left, right) => compareFileNames(entrySortPath(left), entrySortPath(right)));
 }
 
-function fileFolderPath(file) {
-  const parts = String(file.webkitRelativePath || "").split("/").filter(Boolean);
+function fileEntriesFromList(fileList) {
+  return [...fileList].map((file) => ({
+    file,
+    handle: null,
+    relativePath: file.webkitRelativePath || file.name,
+  }));
+}
+
+function trackFolderPath(track) {
+  const parts = String(track.relativePath || track.file.webkitRelativePath || "").split("/").filter(Boolean);
   return parts.length > 1 ? parts.slice(0, -1).join(" / ") : "";
+}
+
+function createPersistentTrackKey() {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function hasHandlePermission(handle, { request = false } = {}) {
+  if (!handle || typeof handle.queryPermission !== "function") return false;
+  try {
+    const options = { mode: "read" };
+    const current = await handle.queryPermission(options);
+    if (current === "granted") return true;
+    if (current === "prompt" && request && typeof handle.requestPermission === "function") {
+      return (await handle.requestPermission(options)) === "granted";
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+async function requestPersistentReferenceStorage() {
+  if (typeof navigator.storage?.persist !== "function") return;
+  try {
+    if (typeof navigator.storage.persisted === "function" && await navigator.storage.persisted()) return;
+    await navigator.storage.persist();
+  } catch {
+    // The reference can still be kept as best-effort browser storage.
+  }
+}
+
+async function collectDirectoryEntries(directoryHandle, basePath = directoryHandle.name) {
+  const entries = [];
+  for await (const [name, handle] of directoryHandle.entries()) {
+    const relativePath = `${basePath}/${name}`;
+    if (handle.kind === "directory") {
+      entries.push(...await collectDirectoryEntries(handle, relativePath));
+      continue;
+    }
+    try {
+      const file = await handle.getFile();
+      entries.push({ file, handle, relativePath });
+    } catch {
+      // Skip entries that disappeared or became unreadable while the folder was scanned.
+    }
+  }
+  return entries;
+}
+
+function syncRestoreLibraryButton() {
+  restoreLibraryButton.hidden = !pendingPlaylistRecord;
+}
+
+function replacePendingPlaylistWithNewSelection() {
+  if (!pendingPlaylistRecord) return;
+  pendingPlaylistRecord = null;
+  syncRestoreLibraryButton();
+}
+
+async function savePlaylistState() {
+  if (suppressPlaylistPersistence || pendingPlaylistRecord) return;
+  const persistentTracks = tracks.filter((track) => track.handle);
+  if (persistentTracks.length === 0) {
+    await deleteStoredAppState(PLAYLIST_STATE_KEY);
+    return;
+  }
+
+  const activeTrack = currentTrack();
+  await putStoredAppState({
+    key: PLAYLIST_STATE_KEY,
+    items: persistentTracks.map((track) => ({
+      persistentKey: track.persistentKey,
+      handle: track.handle,
+      relativePath: track.relativePath || track.file.name,
+    })),
+    currentPersistentKey: activeTrack?.persistentKey || null,
+    directoryHandle: lastSelectedDirectoryHandle,
+    savedAt: Date.now(),
+  });
+}
+
+function persistPlaylistState() {
+  if (!fileHandleSelectionSupported && !directoryHandleSelectionSupported) return;
+  savePlaylistState().catch(() => {
+    showStatus("再生リストの参照先を保存できませんでした。音声の再生は続けられます。", "error");
+  });
 }
 
 function formatTime(seconds) {
@@ -482,10 +603,10 @@ function setImportState(state) {
   }, state === "error" ? 3000 : 1200);
 }
 
-async function addFiles(fileList, { source = "files" } = {}) {
+async function addFiles(fileList, { source = "files", entries = null } = {}) {
   setImportState("loading");
-  const selectedFiles = [...fileList];
-  const candidates = sortedAudioFiles(selectedFiles);
+  const selectedEntries = entries || fileEntriesFromList(fileList);
+  const candidates = sortedAudioEntries(selectedEntries);
   const fromFolder = source === "folder" || source === "next-five";
 
   if (candidates.length === 0) {
@@ -501,13 +622,17 @@ async function addFiles(fileList, { source = "files" } = {}) {
 
   const knownIds = new Set(tracks.map((track) => track.id));
   const added = [];
-  candidates.forEach((file) => {
+  candidates.forEach((entry) => {
+    const { file } = entry;
     const id = fileId(file);
     if (knownIds.has(id)) return;
     knownIds.add(id);
     added.push({
       id,
       file,
+      handle: entry.handle || null,
+      relativePath: entry.relativePath || file.webkitRelativePath || file.name,
+      persistentKey: entry.persistentKey || createPersistentTrackKey(),
       url: URL.createObjectURL(file),
       duration: null,
       learningState: "checking",
@@ -527,13 +652,14 @@ async function addFiles(fileList, { source = "files" } = {}) {
   added.forEach(readTrackDuration);
 
   if (currentIndex === -1) selectTrack(firstAddedIndex);
+  persistPlaylistState();
 
   setImportState("success");
   const skippedCount = candidates.length - added.length;
-  const ignoredCount = selectedFiles.length - candidates.length;
+  const ignoredCount = selectedEntries.length - candidates.length;
   const addedFrom = source === "folder"
     ? "フォルダから"
-    : (source === "next-five" ? "フォルダから続きの" : "");
+    : (source === "next-five" ? "フォルダから続きの" : (source === "restore" ? "保存済みの" : ""));
   const details = [
     skippedCount > 0 ? `重複${skippedCount}件を除外` : "",
     ignoredCount > 0 ? `音声以外${ignoredCount}件を除外` : "",
@@ -543,24 +669,48 @@ async function addFiles(fileList, { source = "files" } = {}) {
   );
 }
 
-function nextFilesFromLastFolder(limit = 5) {
-  if (lastSelectedFolderFiles.length === 0) return [];
+function nextEntriesFromLastFolder(limit = 5) {
+  if (lastSelectedFolderEntries.length === 0) return [];
 
   const knownIds = new Set(tracks.map((track) => track.id));
   const largestTrackName = tracks.reduce((largest, track) => (
     !largest || compareFileNames(track.file.name, largest) > 0 ? track.file.name : largest
   ), "");
 
-  return lastSelectedFolderFiles
-    .filter((file) => !knownIds.has(fileId(file)))
-    .filter((file) => !largestTrackName || compareFileNames(file.name, largestTrackName) > 0)
-    .sort((left, right) => compareFileNames(left.name, right.name))
+  return lastSelectedFolderEntries
+    .filter((entry) => !knownIds.has(fileId(entry.file)))
+    .filter((entry) => !largestTrackName || compareFileNames(entry.file.name, largestTrackName) > 0)
+    .sort((left, right) => compareFileNames(left.file.name, right.file.name))
     .slice(0, limit);
 }
 
-function requestFolderSelection(mode) {
+async function requestFolderSelection(mode) {
   pendingFolderAddMode = mode;
-  folderInput.click();
+  if (!directoryHandleSelectionSupported) {
+    folderInput.click();
+    return;
+  }
+
+  try {
+    const directoryHandle = await window.showDirectoryPicker({ mode: "read" });
+    const selectedEntries = await collectDirectoryEntries(directoryHandle);
+    requestPersistentReferenceStorage();
+    lastSelectedDirectoryHandle = directoryHandle;
+    lastSelectedFolderEntries = sortedAudioEntries(selectedEntries);
+    if (lastSelectedFolderEntries.length > 0) replacePendingPlaylistWithNewSelection();
+    const addMode = pendingFolderAddMode;
+    pendingFolderAddMode = "all";
+    if (addMode === "next-five") {
+      await addNextFiveFromLastFolder();
+    } else {
+      await addFiles([], { source: "folder", entries: selectedEntries });
+    }
+  } catch (error) {
+    pendingFolderAddMode = "all";
+    if (error?.name !== "AbortError") {
+      showStatus("フォルダを開けませんでした。端末のファイル権限を確認してください。", "error");
+    }
+  }
 }
 
 async function addNextFiveFromLastFolder() {
@@ -569,19 +719,146 @@ async function addNextFiveFromLastFolder() {
     return;
   }
 
-  if (lastSelectedFolderFiles.length === 0) {
-    requestFolderSelection("next-five");
+  if (lastSelectedFolderEntries.length === 0) {
+    await requestFolderSelection("next-five");
     return;
   }
 
-  const nextFiles = nextFilesFromLastFolder(5);
-  if (nextFiles.length === 0) {
+  const nextEntries = nextEntriesFromLastFolder(5);
+  if (nextEntries.length === 0) {
     setImportState("error");
     showStatus("現在の最大ファイル名より後に追加できる音声はありません。", "error");
     return;
   }
 
-  await addFiles(nextFiles, { source: "next-five" });
+  await addFiles([], { source: "next-five", entries: nextEntries });
+}
+
+async function chooseFilesWithHandles() {
+  try {
+    const handles = await window.showOpenFilePicker({
+      multiple: true,
+      excludeAcceptAllOption: false,
+      types: [{
+        description: "音声ファイル",
+        accept: {
+          "audio/*": [".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".flac"],
+        },
+      }],
+    });
+    requestPersistentReferenceStorage();
+    const entries = await Promise.all(handles.map(async (handle) => ({
+      file: await handle.getFile(),
+      handle,
+      relativePath: handle.name,
+    })));
+    if (sortedAudioEntries(entries).length > 0) replacePendingPlaylistWithNewSelection();
+    await addFiles([], { source: "files", entries });
+  } catch (error) {
+    if (error?.name !== "AbortError") {
+      showStatus("音声ファイルを開けませんでした。端末のファイル権限を確認してください。", "error");
+    }
+  }
+}
+
+async function restorePlaylistRecord(record, { requestPermission = false } = {}) {
+  const items = Array.isArray(record?.items) ? record.items.filter((item) => item?.handle) : [];
+  if (items.length === 0) {
+    pendingPlaylistRecord = null;
+    syncRestoreLibraryButton();
+    return;
+  }
+
+  if (record.directoryHandle) {
+    await hasHandlePermission(record.directoryHandle, { request: requestPermission });
+  }
+
+  const permissionResults = await Promise.all(items.map((item) => (
+    hasHandlePermission(item.handle, { request: requestPermission })
+  )));
+  if (permissionResults.some((granted) => !granted)) {
+    pendingPlaylistRecord = record;
+    syncRestoreLibraryButton();
+    if (requestPermission) {
+      showStatus("音声へのアクセスが許可されませんでした。再接続をもう一度お試しください。", "error");
+    }
+    return;
+  }
+
+  const resolvedEntries = [];
+  for (const item of items) {
+    try {
+      const file = await item.handle.getFile();
+      resolvedEntries.push({
+        file,
+        handle: item.handle,
+        relativePath: item.relativePath || file.name,
+        persistentKey: item.persistentKey || createPersistentTrackKey(),
+      });
+    } catch {
+      // A moved or deleted file is omitted while the remaining list is restored.
+    }
+  }
+
+  if (resolvedEntries.length === 0) {
+    pendingPlaylistRecord = record;
+    syncRestoreLibraryButton();
+    showStatus("保存した音声が見つかりません。移動や削除がないか確認してください。", "error");
+    return;
+  }
+
+  suppressPlaylistPersistence = true;
+  try {
+    if (record.directoryHandle && await hasHandlePermission(record.directoryHandle)) {
+      lastSelectedDirectoryHandle = record.directoryHandle;
+      try {
+        lastSelectedFolderEntries = sortedAudioEntries(await collectDirectoryEntries(record.directoryHandle));
+      } catch {
+        lastSelectedFolderEntries = [];
+      }
+    }
+    await addFiles([], { source: "restore", entries: resolvedEntries });
+    const restoredIndex = tracks.findIndex((track) => (
+      track.persistentKey === record.currentPersistentKey
+    ));
+    if (restoredIndex >= 0 && restoredIndex !== currentIndex) {
+      await selectTrack(restoredIndex);
+    }
+  } finally {
+    suppressPlaylistPersistence = false;
+  }
+
+  pendingPlaylistRecord = null;
+  syncRestoreLibraryButton();
+  persistPlaylistState();
+  if (resolvedEntries.length < items.length) {
+    showStatus(`${resolvedEntries.length}件を復元しました。見つからない音声は再生リストから除外しました。`, "error");
+  } else {
+    showStatus(`${resolvedEntries.length}件の再生リストを復元しました。`);
+  }
+}
+
+async function restoreSavedPlaylist() {
+  if (!fileHandleSelectionSupported && !directoryHandleSelectionSupported) return;
+  try {
+    const record = await getStoredAppState(PLAYLIST_STATE_KEY);
+    if (!record) return;
+    await restorePlaylistRecord(record);
+  } catch {
+    showStatus("保存した再生リストを確認できませんでした。音声を追加し直してください。", "error");
+  }
+}
+
+async function reconnectSavedPlaylist() {
+  if (!pendingPlaylistRecord) return;
+  restoreLibraryButton.disabled = true;
+  restoreLibraryButton.setAttribute("aria-busy", "true");
+  try {
+    await restorePlaylistRecord(pendingPlaylistRecord, { requestPermission: true });
+  } finally {
+    restoreLibraryButton.disabled = false;
+    restoreLibraryButton.removeAttribute("aria-busy");
+  }
 }
 
 function syncFilePickerUi() {
@@ -632,6 +909,7 @@ function selectTrack(index, autoplay = false) {
   syncLoopUi();
   syncControls();
   syncPracticeUi();
+  persistPlaylistState();
   return loadTranscript(track);
 }
 
@@ -662,6 +940,7 @@ function removeTrack(index) {
 
   renderLibrary();
   syncControls();
+  persistPlaylistState();
 }
 
 function resetPlayer() {
@@ -789,7 +1068,7 @@ function renderLibrary() {
 
     const meta = document.createElement("span");
     meta.className = "track-select__meta";
-    const folderPath = fileFolderPath(track.file);
+    const folderPath = trackFolderPath(track);
     const durationText = track.duration ? formatTime(track.duration) : "長さを確認中";
     meta.textContent = folderPath ? `${folderPath} · ${durationText}` : durationText;
 
@@ -2067,11 +2346,15 @@ function syncConnectionState() {
   connectionStatus.textContent = navigator.onLine ? "オンライン" : "オフラインで利用中";
 }
 
-const folderSelectionSupported = "webkitdirectory" in folderInput;
+const fileHandleSelectionSupported = typeof window.showOpenFilePicker === "function";
+const directoryHandleSelectionSupported = typeof window.showDirectoryPicker === "function";
+const folderSelectionSupported = directoryHandleSelectionSupported || "webkitdirectory" in folderInput;
 if (!folderSelectionSupported) {
   chooseFolderButton.disabled = true;
   addNextFiveButton.disabled = true;
   folderSupportNote.textContent = "このブラウザはフォルダ選択に対応していません。複数ファイルを選んで追加してください。";
+} else if (!fileHandleSelectionSupported || !directoryHandleSelectionSupported) {
+  folderSupportNote.textContent = "フォルダ内の音声をまとめて追加できます。このブラウザでは参照先を保存できないため、次回起動時は音声を選び直してください。";
 }
 
 appInfoButton.addEventListener("click", () => openSettingsDialog(appInfoDialog, appInfoClose));
@@ -2094,7 +2377,11 @@ filePickerButton.addEventListener("click", () => openSettingsDialog(importDialog
 importDialogClose.addEventListener("click", () => importDialog.close());
 chooseFilesButton.addEventListener("click", () => {
   importDialog.close();
-  fileInput.click();
+  if (fileHandleSelectionSupported) {
+    chooseFilesWithHandles();
+  } else {
+    fileInput.click();
+  }
 });
 chooseFolderButton.addEventListener("click", () => {
   if (!folderSelectionSupported) return;
@@ -2103,18 +2390,26 @@ chooseFolderButton.addEventListener("click", () => {
 });
 closeSettingsOnBackdrop(importDialog);
 addNextFiveButton.addEventListener("click", addNextFiveFromLastFolder);
+restoreLibraryButton.addEventListener("click", reconnectSavedPlaylist);
 
 fileInput.addEventListener("change", async (event) => {
+  if (sortedAudioEntries(fileEntriesFromList(event.target.files)).length > 0) {
+    replacePendingPlaylistWithNewSelection();
+  }
   await addFiles(event.target.files, { source: "files" });
   event.target.value = "";
 });
 
 folderInput.addEventListener("change", async (event) => {
   const selectedFiles = [...event.target.files];
-  lastSelectedFolderFiles = sortedAudioFiles(selectedFiles);
+  if (sortedAudioEntries(fileEntriesFromList(selectedFiles)).length > 0) {
+    replacePendingPlaylistWithNewSelection();
+  }
+  lastSelectedDirectoryHandle = null;
+  lastSelectedFolderEntries = sortedAudioEntries(fileEntriesFromList(selectedFiles));
   const addMode = pendingFolderAddMode;
   pendingFolderAddMode = "all";
-  if (addMode === "next-five" && lastSelectedFolderFiles.length > 0) {
+  if (addMode === "next-five" && lastSelectedFolderEntries.length > 0) {
     await addNextFiveFromLastFolder();
   } else {
     await addFiles(selectedFiles, { source: addMode === "next-five" ? "next-five" : "folder" });
@@ -2485,6 +2780,7 @@ window.addEventListener("appinstalled", () => {
 });
 
 setupMediaSessionActionHandlers();
+restoreSavedPlaylist();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {

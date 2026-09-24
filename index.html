@@ -26,7 +26,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=44" />
+    <link rel="stylesheet" href="./styles.css?v=45" />
     <title>Listening Desk — 英語音声プレイヤー</title>
   </head>
   <body>
@@ -507,6 +507,15 @@
             </div>
             <div class="library-actions">
               <button
+                class="control control--quiet restore-library"
+                id="restore-library-button"
+                type="button"
+                aria-label="保存した再生リストの音声へ再接続"
+                hidden
+              >
+                音声に再接続
+              </button>
+              <button
                 class="control control--quiet add-next-five"
                 id="add-next-five-button"
                 type="button"
@@ -565,7 +574,7 @@
                   <li><strong>Android</strong><span>最初の音声を長押しし、残りをタップして「選択」。</span></li>
                 </ul>
               </div>
-              <p class="import-support-note" id="folder-support-note">フォルダを選ぶと、中の対応音声を名前順にまとめて追加します。「5音声追加」は、同じ画面を開いている間、最後に選んだフォルダから続きの5件を追加します。</p>
+              <p class="import-support-note" id="folder-support-note">フォルダを選ぶと、中の対応音声を名前順にまとめて追加します。対応するブラウザでは、音声をコピーせず参照先と再生リストを保存し、次回起動時に復元します。</p>
               <div class="word-dialog__actions">
                 <button class="control control--text" id="import-dialog-close" type="button">閉じる</button>
               </div>
@@ -620,7 +629,7 @@
           </div>
           <div>
             <dt>このブラウザに保存</dt>
-            <dd>設定・前回位置・英文・単語時刻・日本語訳を記録します。</dd>
+            <dd>設定・前回位置・英文・単語時刻・日本語訳に加え、対応ブラウザでは音声の参照先と再生リストを記録します。音声本体はコピーしません。</dd>
           </div>
         </dl>
         <div class="word-dialog__actions">
@@ -631,6 +640,6 @@
 
     <div class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./app.js?v=44"></script>
+    <script type="module" src="./app.js?v=45"></script>
   </body>
 </html>
