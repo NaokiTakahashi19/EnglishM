@@ -5,6 +5,7 @@ const fileAction = document.querySelector("#file-action");
 const filePickerButton = document.querySelector("#file-picker-button");
 const filePickerText = document.querySelector("#file-picker-text");
 const restoreLibraryButton = document.querySelector("#restore-library-button");
+const restoreLibraryText = document.querySelector("#restore-library-text");
 const addNextFiveButton = document.querySelector("#add-next-five-button");
 const importDialog = document.querySelector("#import-dialog");
 const importDialogClose = document.querySelector("#import-dialog-close");
@@ -852,12 +853,18 @@ async function restoreSavedPlaylist() {
 async function reconnectSavedPlaylist() {
   if (!pendingPlaylistRecord) return;
   restoreLibraryButton.disabled = true;
+  restoreLibraryButton.dataset.state = "loading";
   restoreLibraryButton.setAttribute("aria-busy", "true");
+  restoreLibraryButton.setAttribute("aria-label", "保存した音声へ再接続しています");
+  restoreLibraryText.textContent = "再接続中…";
   try {
     await restorePlaylistRecord(pendingPlaylistRecord, { requestPermission: true });
   } finally {
     restoreLibraryButton.disabled = false;
+    delete restoreLibraryButton.dataset.state;
     restoreLibraryButton.removeAttribute("aria-busy");
+    restoreLibraryButton.setAttribute("aria-label", "保存した再生リストの音声へ再接続");
+    restoreLibraryText.textContent = "音声に再接続";
   }
 }
 

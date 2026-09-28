@@ -26,7 +26,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=45" />
+    <link rel="stylesheet" href="./styles.css?v=46" />
     <title>Listening Desk — 英語音声プレイヤー</title>
   </head>
   <body>
@@ -513,7 +513,7 @@
                 aria-label="保存した再生リストの音声へ再接続"
                 hidden
               >
-                音声に再接続
+                <span id="restore-library-text" aria-live="polite">音声に再接続</span>
               </button>
               <button
                 class="control control--quiet add-next-five"
@@ -640,6 +640,6 @@
 
     <div class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./app.js?v=45"></script>
+    <script type="module" src="./app.js?v=46"></script>
   </body>
 </html>

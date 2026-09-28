@@ -18,7 +18,7 @@
  * contrast: pass (40–41) · mobile: pass (34, 49–56)
  */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · slop: pass (1–58) */
-@import url("./tokens.css?v=45");
+@import url("./tokens.css?v=46");
 
 *,
 *::before,
@@ -1540,6 +1540,10 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
   border-block-end-color: transparent;
   border-radius: var(--radius-round);
   animation: spin 1s linear infinite;
+}
+
+.restore-library[data-state="loading"]:disabled {
+  opacity: 1;
 }
 
 .control[data-state="error"],
