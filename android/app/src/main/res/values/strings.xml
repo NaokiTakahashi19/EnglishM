@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Listening Desk</string>
+    <string name="title_activity_main">Listening Desk</string>
+    <string name="package_name">com.naokitakahashi.listeningdesk</string>
+    <string name="custom_url_scheme">com.naokitakahashi.listeningdesk</string>
+</resources>

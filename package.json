@@ -1,0 +1,19 @@
+{
+  "name": "listening-desk",
+  "version": "48.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:native-web": "node scripts/build-native-web.mjs",
+    "cap:sync": "npm run build:native-web && cap sync android",
+    "android:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
+    "android:open": "npm run cap:sync && cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}

@@ -1,6 +1,6 @@
 # Listening Desk
 
-端末内の英語学習用音声を再生する、インストール可能なPWAです。通常の再生は端末内だけで行います。「音声から生成」を実行した場合に限り、選択中の音声を専用Vercel API経由でOpenAI Audio APIへ送信します。
+端末内の長い英語学習用音声を文ごとに再生する、インストール可能なPWAです。通常の再生は端末内だけで行います。「英文と和訳を生成」を実行した場合に限り、選択中の音声を専用Vercel API経由でOpenAI Audio APIへ送信します。
 
 ## 起動
 
@@ -12,8 +12,41 @@ python3 -m http.server 4173
 
 ブラウザで `http://localhost:4173` を開いてください。
 
+## Androidアプリ（v48）
+
+Android版は既存のPWA画面をCapacitorで端末アプリ化し、AndroidのStorage Access Frameworkで選択したファイル／フォルダの読み取り権限を保持します。初回だけ音声またはフォルダを選ぶと、再生リストと現在の音声をAndroid側へ保存し、2回目以降は起動時に自動復元します。「音声に再接続」を毎回押す必要はありません。
+
+音声本体はアプリ領域へ恒久複製しません。再生に必要なファイルだけを一時キャッシュへ展開し、元のファイル参照はAndroidの永続URI権限として保存します。端末側でファイルを移動・改名・削除した場合、該当する音声は次回復元時にリストから除外されます。
+
+Android版には次も含まれます。
+
+- 複数ファイル選択とフォルダ選択
+- 最後に選んだフォルダからの「5音声追加」
+- 前回の再生リストと選択中音声の自動復元
+- 再生・一時停止・前後の音声・早送り・巻き戻し・シークを受け取るAndroid Media Session
+- 既存の英文生成・日本語訳・単語訳（Vercel APIを共用）
+
+### デバッグAPKの作成
+
+Capacitor 8のAndroidプロジェクトは `android/` にあります。GitHubの「Actions」→「Android debug APK」→「Run workflow」でビルドすると、成果物 `listening-desk-v48-debug` から `app-debug.apk` を取得できます。ワークフローはNode.js 24、Java 21、Android API 36でビルドします。
+
+ローカルで作成する場合は、Capacitor 8に対応したAndroid Studio 2025.2.1以降とAndroid SDKを用意し、次を実行します。
+
+```sh
+npm ci
+npm run android:debug
+```
+
+APKは `android/app/build/outputs/apk/debug/app-debug.apk` に生成されます。
+
 ## 学習機能
 
+- 20秒〜2分程度の長い音声を、認識した英文1文ごとの開始・終了時刻に分割
+- 1文の再生が終わるたびに自動停止するリピーティング
+- 直前の文の実再生時間を基準に0.7〜1.5倍待って自動再開、または∞（再生ボタンまで停止）
+- 現在の英文と文ごとの日本語訳を常時表示
+- 「現在の1文」と、再生中の文を中央へ追従する「スクロール全文」の2表示
+- 英文を選ぶと、その文の先頭から再生
 - 複数ファイル選択・フォルダ選択に対応した再生リスト
 - 対応ブラウザで、音声をコピーせずファイル参照と再生リストを保存し、次回起動時に自動復元
 - 保存した参照の権限が切れた場合にだけ表示される「音声に再接続」操作
@@ -27,7 +60,7 @@ python3 -m http.server 4173
 - ファイル終了ごとに、再生ボタンを押すまで次を待つ練習モード
 - ファイルの実再生時間の0.7〜1.5倍待ち、同じ音声または次の音声を自動再生する練習モード
 - 再生リストを順番に進む、各音声を指定回数再生してから進む、同じ音声を無限に繰り返す3つの再生方法
-- OpenAI Whisper APIによる英語スクリプト・単語時刻生成
+- OpenAI Whisper APIによる英語スクリプト、文・単語時刻の生成
 - 生成・修正したスクリプトのIndexedDB保存と再表示
 - 再生位置に合わせた単語ハイライトと、単語選択によるシーク
 - 停止中に単語を選んだ場合のOpenAI APIによる日本語訳ポップアップ
@@ -50,7 +83,7 @@ Android Chromeでは、5秒未満の音声は短い効果音として扱われ�
 
 ## 英文生成と外部送信について
 
-「音声から生成」を実行すると、選択中の音声ファイルを専用Vercel APIへ送り、サーバーからOpenAIの `whisper-1` へ転送します。通常の再生だけでは音声を外部へ送信しません。英文生成はMP3、MP4、MPEG、MPGA、M4A、WAV、WEBMに対応し、1ファイル4MBまで、ブラウザ側の待機時間は90秒です。
+「英文と和訳を生成」を実行すると、選択中の音声ファイルを専用Vercel APIへ送り、サーバーからOpenAIの `whisper-1` へ転送します。通常の再生だけでは音声を外部へ送信しません。英文生成はMP3、MP4、MPEG、MPGA、M4A、WAV、WEBMに対応し、1ファイル4MBまで、ブラウザ側の待機時間は90秒です。文字起こし後は文末記号を基準に文へまとめ、各文の日本語訳を同じ順序で生成します。
 
 日本語訳を生成するときは、英文全体または選択した単語だけを専用Vercel API経由でOpenAI Responses APIへ送信します。OpenAI APIキーはブラウザへ保存せず、Vercelの環境変数だけに保持します。処理時間と精度は通信状態・録音品質・話者によって変わります。
 
@@ -58,14 +91,40 @@ Android Chromeでは、5秒未満の音声は短い効果音として扱われ�
 
 ## OpenAI APIの公開設定
 
-OpenAI APIキーをブラウザやGitHub Pagesへ置かないでください。このリポジトリの `api/transcribe.js` と `api/translate.js` をVercelへ公開し、次の値をVercelの環境変数として設定します。
+OpenAI APIキーをブラウザやGitHub Pagesへ置かないでください。このリポジトリの `api/transcribe.js` と `api/translate.js` を含めてVercelへ公開し、次の値をVercelの環境変数として設定します。
 
 - `OPENAI_API_KEY`: OpenAI Platformで発行したAPIキー
 - `TRANSLATION_ACCESS_KEY`: 英文生成と日本語訳で共用する長いランダム値（OpenAI APIキーとは別）
 - `OPENAI_MODEL`: 省略時は `gpt-5.6-luna`
+- `OPENAI_TTS_MODEL`: 音声生成用モデル。省略時は `gpt-4o-mini-tts`
+- `OPENAI_TTS_VOICE`: 音声生成に使う声。省略時は `marin`
 - `ALLOWED_ORIGINS`: 必要な場合のみ、許可する追加オリジンをカンマ区切りで指定
 
 利用者はアプリの「API設定」に `TRANSLATION_ACCESS_KEY` の値だけを入力します。この共通アクセスキー1つで、英文生成と日本語訳の両方を利用できます。OpenAI APIキー自体は入力しません。英文・単語時刻・英文全体の日本語訳・単語訳はIndexedDBに保存され、2回目以降は保存済みの内容を表示します。
+
+## 英文音声の生成
+
+`POST /api/speech` は英語テキストをMP3として返します。翻訳と同じ `X-Translation-Key` ヘッダーで認証するため、ブラウザへ `OPENAI_API_KEY` を渡しません。リクエスト本文は `text`（必須、4,096文字まで）、`voice`（任意）、`speed`（任意、0.75〜1.25）、`filename`（任意）です。既存の `OPENAI_API_KEY` と `TRANSLATION_ACCESS_KEY` をそのまま使用できます。
+
+Vercelを使わず、ローカルから直接MP3を生成する場合は `scripts/generate-chunk-audio.mjs` を使えます。APIキーをソースコード・CSV・Gitへ保存せず、実行したターミナルの環境変数だけに設定してください。
+
+```bash
+export OPENAI_API_KEY="sk-XXXXXXX"
+node scripts/generate-chunk-audio.mjs --limit 5
+unset OPENAI_API_KEY
+```
+
+`sk-XXXXXXX` の部分だけを、OpenAI Platformで発行した実際のAPIキーに置き換えます。APIキーはチャット・ソースコード・Gitへ貼り付けないでください。コマンド履歴へ残したくない場合は、代わりに `read -s OPENAI_API_KEY` で入力してから `export OPENAI_API_KEY` を実行できます。
+
+このコマンドは `chunk-audio/001-01.mp3` のような名前で保存します。全360例文を作る場合は `--limit` を外します。すでにある音声を残す場合は `--skip-existing` を付けます。APIを呼ばずに対象を確認するには `node scripts/generate-chunk-audio.mjs --limit 5 --dry-run` を使います。
+
+EduTech・IT例文240件を別フォルダに生成する場合は、次を使います。
+
+```bash
+export OPENAI_API_KEY="sk-XXXXXXX"
+node scripts/generate-chunk-audio.mjs --source ../ChunkResponse/edtech_it_chunk_examples.md --expected-count 240 --output ../ChunkResponse/edtech-it-audio
+unset OPENAI_API_KEY
+```
 
 アプリは共通アクセスキーの保存前にサーバーへ接続確認を行います。`sk-proj-` などで始まるOpenAI APIキーは入力対象ではありません。
 
@@ -76,3 +135,24 @@ OpenAI APIキーをブラウザやGitHub Pagesへ置かないでください。�
 - File System Access API対応ブラウザでは、保存した参照権限が有効ならアプリを閉じた後も再生リストを復元できます。権限が切れている場合は「音声に再接続」を1回タップします。
 - 未対応ブラウザでは、アプリを閉じた後に音声の再選択が必要です。
 - 英文生成、日本語訳、単語訳にはインターネット接続が必要です。
+
+## 英作文チェック
+
+`/grammar-checker/` には、中高生向けの英文法チェック画面があります。英文を入力して「文法チェック」を押すと、1回のOpenAI Responses APIリクエストで次を返します。
+
+- 文法・語形・構文・表現・スペルの誤りを分類したハイライト
+- ハイライトへのマウスオーバー、キーボードフォーカス、タップで表示する日本語解説
+- 誤りごとの修正案と、全文の修正文
+
+ローカルでは、APIを含む開発サーバーを `http://localhost:4173` で起動し、`http://localhost:4173/grammar-checker/` を開きます。静的ファイルだけを確認する場合は、通常のHTTPサーバーでも画面を表示できますが、実際の文法チェックには `/api/grammar-check` が必要です。
+
+### 文法チェックAPIの公開設定
+
+`api/grammar-check.js` をVercelへ公開し、次の環境変数を設定します。OpenAI APIキーはブラウザへ渡しません。
+
+- `OPENAI_API_KEY`: OpenAI Platformで発行したAPIキー
+- `GRAMMAR_ACCESS_KEY`: 英作文チェック専用の長いランダム値
+- `OPENAI_MODEL`: 省略時は `gpt-5.6-luna`
+- `ALLOWED_ORIGINS`: 必要な場合のみ、許可する追加オリジンをカンマ区切りで指定
+
+`GRAMMAR_ACCESS_KEY` が未設定の場合は、既存の `TRANSLATION_ACCESS_KEY` を共用できます。利用者は画面の「接続設定」に専用アクセスキーだけを入力します。送信されるのは入力した英文だけです。

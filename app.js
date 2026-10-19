@@ -32,8 +32,6 @@ const playbackSettingsStatus = document.querySelector("#playback-settings-status
 const playbackSettingsButton = document.querySelector("#playback-settings-button");
 const playbackSettingsDialog = document.querySelector("#playback-settings-dialog");
 const playbackSettingsClose = document.querySelector("#playback-settings-close");
-const manualNextModeButton = document.querySelector("#manual-next-mode-button");
-const autoNextModeButton = document.querySelector("#auto-next-mode-button");
 const pauseRatioSelect = document.querySelector("#pause-ratio");
 const practiceStatus = document.querySelector("#practice-status");
 const practiceSettingsStatus = document.querySelector("#practice-settings-status");
@@ -62,6 +60,11 @@ const deleteTranscriptButton = document.querySelector("#delete-transcript-button
 const transcriptStatus = document.querySelector("#transcript-status");
 const syncScript = document.querySelector("#sync-script");
 const syncTranscript = document.querySelector("#sync-transcript");
+const sentenceDisplayModeSelect = document.querySelector("#sentence-display-mode");
+const currentSentencePosition = document.querySelector("#current-sentence-position");
+const currentSentenceEnglish = document.querySelector("#current-sentence-english");
+const currentSentenceTranslation = document.querySelector("#current-sentence-translation");
+const sentenceList = document.querySelector("#sentence-list");
 const currentTranslationButton = document.querySelector("#current-translation-button");
 const currentTranslationDialog = document.querySelector("#current-translation-dialog");
 const currentTranslationOutput = document.querySelector("#current-translation-output");
@@ -137,6 +140,10 @@ const THEME_LABELS = {
   sage: "セージ",
   night: "ナイト",
 };
+const nativeAudioLibrary = window.Capacitor?.getPlatform?.() === "android"
+  ? window.Capacitor?.Plugins?.AudioLibrary
+  : null;
+const nativeAudioLibrarySupported = Boolean(nativeAudioLibrary);
 
 let tracks = [];
 let currentIndex = -1;
@@ -158,6 +165,15 @@ let transcriptSaveTimer = null;
 let activeTranscriptRecord = null;
 let syncWordButtons = [];
 let activeSyncWordIndex = -1;
+let sentenceButtons = [];
+let activeSentenceIndex = -1;
+let sentencePlaybackIndex = -1;
+let sentenceBoundaryLock = -1;
+let sentencePauseTimer = null;
+let sentenceCountdownTimer = null;
+let sentencePauseUntil = 0;
+let sentencePauseActive = false;
+let pendingSentenceIndex = -1;
 let selectedWord = null;
 let transcriptEditorForcedTrackId = null;
 let openSwipeRow = null;
@@ -166,6 +182,8 @@ let lastSelectedDirectoryHandle = null;
 let pendingPlaylistRecord = null;
 let suppressPlaylistPersistence = false;
 let pendingFolderAddMode = "all";
+let nativeMediaListenerInstalled = false;
+let lastNativeMediaSessionUpdate = 0;
 
 const storedSettings = readStored(SETTINGS_KEY, {});
 const settings = {
@@ -176,6 +194,7 @@ const settings = {
   pauseRatio: 1.2,
   transcriptVisible: true,
   transcriptShowFrom: 1,
+  sentenceDisplayMode: "focus",
   theme: "warm",
   ...storedSettings,
 };
@@ -184,8 +203,10 @@ if (!["sequence", "count", "infinite"].includes(settings.playbackMode)) {
 }
 settings.repeatCount = Math.min(99, Math.max(2, Math.round(Number(settings.repeatCount) || 3)));
 settings.transcriptShowFrom = Math.min(99, Math.max(1, Math.round(Number(settings.transcriptShowFrom) || 1)));
-const supportedPauseRatios = [0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.5];
+const supportedPauseRatios = [0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5];
 settings.pauseRatio = supportedPauseRatios.includes(Number(settings.pauseRatio)) ? Number(settings.pauseRatio) : 1.2;
+settings.practiceMode = settings.practiceMode === "auto" ? "auto" : "manual";
+settings.sentenceDisplayMode = settings.sentenceDisplayMode === "scroll" ? "scroll" : "focus";
 settings.theme = Object.hasOwn(THEME_LABELS, settings.theme) ? settings.theme : "warm";
 delete settings.repeatOne;
 const positions = readStored(POSITIONS_KEY, {});
@@ -194,7 +215,8 @@ const loops = readStored(LOOPS_KEY, {});
 rateSelect.value = String(settings.rate);
 playbackModeSelect.value = settings.playbackMode;
 repeatCountInput.value = String(settings.repeatCount);
-pauseRatioSelect.value = String(settings.pauseRatio);
+pauseRatioSelect.value = settings.practiceMode === "manual" ? "manual" : String(settings.pauseRatio);
+sentenceDisplayModeSelect.value = settings.sentenceDisplayMode;
 audio.playbackRate = settings.rate;
 applyTheme(settings.theme, { persist: false });
 syncConnectionState();
@@ -472,6 +494,36 @@ function fileEntriesFromList(fileList) {
   }));
 }
 
+function nativeEntryFromDescriptor(descriptor) {
+  const name = String(descriptor?.name || "audio");
+  const relativePath = String(descriptor?.relativePath || name);
+  const file = {
+    name,
+    size: Number(descriptor?.size) || 0,
+    type: String(descriptor?.type || "application/octet-stream"),
+    lastModified: Number(descriptor?.lastModified) || 0,
+    webkitRelativePath: relativePath,
+  };
+  return {
+    file,
+    handle: null,
+    relativePath,
+    persistentKey: String(descriptor?.uri || createPersistentTrackKey()),
+    nativeUri: String(descriptor?.uri || ""),
+    url: window.Capacitor.convertFileSrc(String(descriptor?.fileUrl || "")),
+  };
+}
+
+function nativeEntriesFromResult(result) {
+  return Array.isArray(result?.entries)
+    ? result.entries.map(nativeEntryFromDescriptor).filter((entry) => entry.nativeUri && entry.url)
+    : [];
+}
+
+function releaseTrackUrl(track) {
+  if (String(track?.url || "").startsWith("blob:")) URL.revokeObjectURL(track.url);
+}
+
 function trackFolderPath(track) {
   const parts = String(track.relativePath || track.file.webkitRelativePath || "").split("/").filter(Boolean);
   return parts.length > 1 ? parts.slice(0, -1).join(" / ") : "";
@@ -538,6 +590,13 @@ function replacePendingPlaylistWithNewSelection() {
 
 async function savePlaylistState() {
   if (suppressPlaylistPersistence || pendingPlaylistRecord) return;
+  if (nativeAudioLibrarySupported) {
+    await nativeAudioLibrary.savePlaylist({
+      uris: tracks.map((track) => track.nativeUri).filter(Boolean),
+      currentUri: currentTrack()?.nativeUri || "",
+    });
+    return;
+  }
   const persistentTracks = tracks.filter((track) => track.handle);
   if (persistentTracks.length === 0) {
     await deleteStoredAppState(PLAYLIST_STATE_KEY);
@@ -559,7 +618,7 @@ async function savePlaylistState() {
 }
 
 function persistPlaylistState() {
-  if (!fileHandleSelectionSupported && !directoryHandleSelectionSupported) return;
+  if (!nativeAudioLibrarySupported && !fileHandleSelectionSupported && !directoryHandleSelectionSupported) return;
   savePlaylistState().catch(() => {
     showStatus("再生リストの参照先を保存できませんでした。音声の再生は続けられます。", "error");
   });
@@ -634,7 +693,8 @@ async function addFiles(fileList, { source = "files", entries = null } = {}) {
       handle: entry.handle || null,
       relativePath: entry.relativePath || file.webkitRelativePath || file.name,
       persistentKey: entry.persistentKey || createPersistentTrackKey(),
-      url: URL.createObjectURL(file),
+      nativeUri: entry.nativeUri || "",
+      url: entry.url || URL.createObjectURL(file),
       duration: null,
       learningState: "checking",
     });
@@ -687,6 +747,26 @@ function nextEntriesFromLastFolder(limit = 5) {
 
 async function requestFolderSelection(mode) {
   pendingFolderAddMode = mode;
+  if (nativeAudioLibrarySupported) {
+    try {
+      setImportState("loading");
+      const result = await nativeAudioLibrary.pickFolder();
+      if (result?.cancelled) return;
+      const selectedEntries = nativeEntriesFromResult(result);
+      lastSelectedDirectoryHandle = null;
+      lastSelectedFolderEntries = sortedAudioEntries(selectedEntries);
+      if (lastSelectedFolderEntries.length > 0) replacePendingPlaylistWithNewSelection();
+      const addMode = pendingFolderAddMode;
+      pendingFolderAddMode = "all";
+      if (addMode === "next-five") await addNextFiveFromLastFolder();
+      else await addFiles([], { source: "folder", entries: selectedEntries });
+    } catch (error) {
+      pendingFolderAddMode = "all";
+      setImportState("error");
+      showStatus("フォルダを開けませんでした。端末のファイル権限を確認してください。", "error");
+    }
+    return;
+  }
   if (!directoryHandleSelectionSupported) {
     folderInput.click();
     return;
@@ -715,6 +795,34 @@ async function requestFolderSelection(mode) {
 }
 
 async function addNextFiveFromLastFolder() {
+  if (nativeAudioLibrarySupported) {
+    try {
+      setImportState("loading");
+      const largestTrackName = tracks.reduce((largest, track) => (
+        !largest || compareFileNames(track.file.name, largest) > 0 ? track.file.name : largest
+      ), "");
+      const result = await nativeAudioLibrary.addNextFiles({
+        afterName: largestTrackName,
+        limit: 5,
+        knownUris: tracks.map((track) => track.nativeUri).filter(Boolean),
+      });
+      if (result?.needsFolder) {
+        await requestFolderSelection("next-five");
+        return;
+      }
+      const entries = nativeEntriesFromResult(result);
+      if (entries.length === 0) {
+        setImportState("error");
+        showStatus("現在の最大ファイル名より後に追加できる音声はありません。", "error");
+        return;
+      }
+      await addFiles([], { source: "next-five", entries });
+    } catch {
+      setImportState("error");
+      showStatus("続きの音声を追加できませんでした。フォルダへのアクセスを確認してください。", "error");
+    }
+    return;
+  }
   if (!folderSelectionSupported) {
     showStatus("このブラウザはフォルダからの続き追加に対応していません。複数ファイルを選んで追加してください。", "error");
     return;
@@ -736,6 +844,20 @@ async function addNextFiveFromLastFolder() {
 }
 
 async function chooseFilesWithHandles() {
+  if (nativeAudioLibrarySupported) {
+    try {
+      setImportState("loading");
+      const result = await nativeAudioLibrary.pickFiles();
+      if (result?.cancelled) return;
+      const entries = nativeEntriesFromResult(result);
+      if (entries.length > 0) replacePendingPlaylistWithNewSelection();
+      await addFiles([], { source: "files", entries });
+    } catch {
+      setImportState("error");
+      showStatus("音声ファイルを開けませんでした。端末のファイル権限を確認してください。", "error");
+    }
+    return;
+  }
   try {
     const handles = await window.showOpenFilePicker({
       multiple: true,
@@ -840,6 +962,40 @@ async function restorePlaylistRecord(record, { requestPermission = false } = {})
 }
 
 async function restoreSavedPlaylist() {
+  if (nativeAudioLibrarySupported) {
+    try {
+      restoreLibraryButton.hidden = false;
+      restoreLibraryButton.disabled = true;
+      restoreLibraryButton.dataset.state = "loading";
+      restoreLibraryButton.setAttribute("aria-busy", "true");
+      restoreLibraryText.textContent = "復元中…";
+      const result = await nativeAudioLibrary.restoreLibrary();
+      const entries = nativeEntriesFromResult(result);
+      if (entries.length === 0) return;
+      suppressPlaylistPersistence = true;
+      try {
+        await addFiles([], { source: "restore", entries });
+        const restoredIndex = tracks.findIndex((track) => track.nativeUri === result.currentUri);
+        if (restoredIndex >= 0 && restoredIndex !== currentIndex) await selectTrack(restoredIndex);
+      } finally {
+        suppressPlaylistPersistence = false;
+      }
+      persistPlaylistState();
+      const missingCount = Array.isArray(result?.missing) ? result.missing.length : 0;
+      showStatus(missingCount > 0
+        ? `${entries.length}件を復元しました。見つからない音声${missingCount}件は除外しました。`
+        : `${entries.length}件の再生リストを自動復元しました。`, missingCount > 0 ? "error" : "success");
+    } catch {
+      showStatus("保存した再生リストを復元できませんでした。端末のファイル権限を確認してください。", "error");
+    } finally {
+      restoreLibraryButton.hidden = true;
+      restoreLibraryButton.disabled = false;
+      delete restoreLibraryButton.dataset.state;
+      restoreLibraryButton.removeAttribute("aria-busy");
+      restoreLibraryText.textContent = "音声に再接続";
+    }
+    return;
+  }
   if (!fileHandleSelectionSupported && !directoryHandleSelectionSupported) return;
   try {
     const record = await getStoredAppState(PLAYLIST_STATE_KEY);
@@ -900,6 +1056,7 @@ function selectTrack(index, autoplay = false) {
   if (wordDialog.open) wordDialog.close();
   if (currentTranslationDialog.open) currentTranslationDialog.close();
   cancelPracticePause(false);
+  resetSentencePractice();
   saveCurrentPosition();
   audio.pause();
   transcriptEditorForcedTrackId = null;
@@ -932,7 +1089,7 @@ function removeTrack(index) {
     audio.load();
   }
 
-  URL.revokeObjectURL(track.url);
+  releaseTrackUrl(track);
   tracks.splice(index, 1);
 
   if (tracks.length === 0) {
@@ -1194,6 +1351,7 @@ function keepCurrentTrackVisible(currentRow) {
 
 function syncControls() {
   const hasTrack = currentIndex >= 0;
+  const usesSentences = hasSentenceCues();
   const controls = [
     playButton,
     previousButton,
@@ -1207,6 +1365,8 @@ function syncControls() {
     control.disabled = !hasTrack;
   });
   seek.disabled = !hasTrack;
+  previousButton.setAttribute("aria-label", usesSentences ? "前の英文" : "前の音声");
+  nextButton.setAttribute("aria-label", usesSentences ? "次の英文" : "次の音声");
 
   const loop = currentLoop();
   clearLoopButton.disabled = !hasTrack || (!Number.isFinite(loop.a) && !Number.isFinite(loop.b));
@@ -1234,12 +1394,13 @@ function syncPlaybackSettingsUi() {
 
 function syncPracticeUi() {
   const mode = settings.practiceMode;
-  manualNextModeButton.setAttribute("aria-pressed", String(mode === "manual"));
-  autoNextModeButton.setAttribute("aria-pressed", String(mode === "auto"));
-  pauseRatioSelect.disabled = mode !== "auto";
-  practiceSettingsStatus.textContent = mode === "auto"
-    ? "ポーズ"
-    : "手動で次へ";
+  pauseRatioSelect.value = mode === "manual" ? "manual" : String(settings.pauseRatio);
+  practiceSettingsStatus.textContent = mode === "auto" ? `${settings.pauseRatio}×` : "∞";
+
+  if (hasSentenceCues()) {
+    updateSentencePracticeStatus();
+    return;
+  }
 
   if (isPracticePause) {
     practiceStatus.dataset.state = "paused";
@@ -1264,14 +1425,6 @@ function syncPracticeUi() {
   } else {
     practiceStatus.textContent = "ファイル終了後、次の音声を選んだ状態で再生ボタンを待ちます。";
   }
-}
-
-function setPracticeMode(mode) {
-  cancelPracticePause(false);
-  settings.practiceMode = mode;
-  writeStored(SETTINGS_KEY, settings);
-  syncControls();
-  syncPracticeUi();
 }
 
 function startAutoNextPause(targetIndex) {
@@ -1322,6 +1475,356 @@ function normalizeTimedWords(words) {
     .filter((word) => word.text && Number.isFinite(word.start));
 }
 
+function normalizeTimedSegments(segments) {
+  if (!Array.isArray(segments)) return [];
+  return segments
+    .map((segment) => ({
+      text: String(segment.text || "").trim(),
+      start: Number(segment.start),
+      end: Number(segment.end),
+    }))
+    .filter((segment) => segment.text && Number.isFinite(segment.start));
+}
+
+function joinEnglishTokens(tokens) {
+  return tokens
+    .join(" ")
+    .replace(/\s+([,.;:!?%])/g, "$1")
+    .replace(/([\[(“‘])\s+/g, "$1")
+    .trim();
+}
+
+function isSentenceEnding(text) {
+  return /[.!?](?:["'”’\])}]+)?$/.test(String(text || "").trim());
+}
+
+function normalizeSentenceCues(sentences) {
+  if (!Array.isArray(sentences)) return [];
+  return sentences
+    .map((sentence, index) => ({
+      id: String(sentence.id || `sentence-${index + 1}`),
+      text: String(sentence.text || "").trim(),
+      translation: String(sentence.translation || "").trim(),
+      start: Number(sentence.start),
+      end: Number(sentence.end),
+    }))
+    .filter((sentence) => sentence.text && Number.isFinite(sentence.start))
+    .map((sentence, index, list) => ({
+      ...sentence,
+      end: Number.isFinite(sentence.end) && sentence.end > sentence.start
+        ? sentence.end
+        : (list[index + 1]?.start || sentence.start + 0.5),
+    }));
+}
+
+function buildSentenceCues(words, segments, transcriptText = "", fallbackDuration = 0) {
+  const normalizedWords = normalizeTimedWords(words);
+  const normalizedSegments = normalizeTimedSegments(segments);
+  const cues = [];
+  let currentTokens = [];
+  let currentStart = Number.NaN;
+  let currentEnd = Number.NaN;
+
+  const flush = () => {
+    const text = joinEnglishTokens(currentTokens);
+    if (text && Number.isFinite(currentStart)) {
+      cues.push({
+        id: `sentence-${cues.length + 1}`,
+        text,
+        translation: "",
+        start: currentStart,
+        end: Number.isFinite(currentEnd) && currentEnd > currentStart ? currentEnd : currentStart + 0.5,
+      });
+    }
+    currentTokens = [];
+    currentStart = Number.NaN;
+    currentEnd = Number.NaN;
+  };
+
+  if (normalizedWords.length > 0) {
+    normalizedWords.forEach((word, index) => {
+      if (!Number.isFinite(currentStart)) currentStart = word.start;
+      currentTokens.push(word.text);
+      currentEnd = Number.isFinite(word.end)
+        ? word.end
+        : (normalizedWords[index + 1]?.start || word.start + 0.4);
+      const cueDuration = currentEnd - currentStart;
+      if (isSentenceEnding(word.text) || cueDuration >= 20) flush();
+    });
+    flush();
+  } else if (normalizedSegments.length > 0) {
+    normalizedSegments.forEach((segment) => {
+      if (!Number.isFinite(currentStart)) currentStart = segment.start;
+      currentTokens.push(segment.text);
+      currentEnd = Number.isFinite(segment.end) ? segment.end : segment.start + 0.5;
+      const cueDuration = currentEnd - currentStart;
+      if (isSentenceEnding(segment.text) || cueDuration >= 20) flush();
+    });
+    flush();
+  }
+
+  if (cues.length === 0 && String(transcriptText || "").trim()) {
+    cues.push({
+      id: "sentence-1",
+      text: String(transcriptText).trim(),
+      translation: "",
+      start: 0,
+      end: Number.isFinite(fallbackDuration) && fallbackDuration > 0 ? fallbackDuration : 1,
+    });
+  }
+
+  return cues.map((cue, index) => ({
+    ...cue,
+    end: Math.max(cue.start + 0.2, Math.min(
+      cue.end,
+      cues[index + 1]?.start || cue.end,
+    )),
+  }));
+}
+
+function normalizeTranscriptRecord(record) {
+  if (!record?.text) return record;
+  const existingSentences = normalizeSentenceCues(record.sentences);
+  return {
+    ...record,
+    words: normalizeTimedWords(record.words),
+    segments: normalizeTimedSegments(record.segments),
+    sentences: existingSentences.length > 0
+      ? existingSentences
+      : buildSentenceCues(record.words, record.segments, record.text, audio.duration),
+  };
+}
+
+function sentenceCues() {
+  return normalizeSentenceCues(activeTranscriptRecord?.sentences);
+}
+
+function hasSentenceCues() {
+  return sentenceCues().length > 0;
+}
+
+function sentenceIndexAtTime(time) {
+  const cues = sentenceCues();
+  if (cues.length === 0) return -1;
+  const safeTime = Number.isFinite(time) ? time : 0;
+  for (let index = cues.length - 1; index >= 0; index -= 1) {
+    if (safeTime >= cues[index].start - 0.03) return index;
+  }
+  return 0;
+}
+
+function keepActiveSentenceVisible(button) {
+  if (!button || settings.sentenceDisplayMode !== "scroll" || sentenceList.clientHeight === 0) return;
+  const listRect = sentenceList.getBoundingClientRect();
+  const buttonRect = button.getBoundingClientRect();
+  const inset = 16;
+  if (buttonRect.top >= listRect.top + inset && buttonRect.bottom <= listRect.bottom - inset) return;
+  sentenceList.scrollBy({
+    top: buttonRect.top - listRect.top - (sentenceList.clientHeight - buttonRect.height) / 2,
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+  });
+}
+
+function updateActiveSentence(index, { scroll = true } = {}) {
+  const cues = sentenceCues();
+  const nextIndex = Math.min(Math.max(Number(index) || 0, 0), Math.max(0, cues.length - 1));
+  if (cues.length === 0) {
+    activeSentenceIndex = -1;
+    currentSentencePosition.textContent = "— / —";
+    currentSentenceEnglish.textContent = "英文を生成すると、現在の1文がここに表示されます。";
+    currentSentenceTranslation.textContent = "和訳も文ごとに表示されます。";
+    return;
+  }
+
+  if (activeSentenceIndex >= 0) {
+    sentenceButtons[activeSentenceIndex]?.removeAttribute("data-active");
+    sentenceButtons[activeSentenceIndex]?.removeAttribute("aria-current");
+  }
+  activeSentenceIndex = nextIndex;
+  const cue = cues[nextIndex];
+  const button = sentenceButtons[nextIndex];
+  button?.setAttribute("data-active", "true");
+  button?.setAttribute("aria-current", "true");
+  currentSentencePosition.textContent = `${nextIndex + 1} / ${cues.length} · ${formatTime(cue.start)}`;
+  currentSentenceEnglish.textContent = cue.text;
+  currentSentenceTranslation.textContent = cue.translation || "和訳を生成しています。";
+  if (scroll) keepActiveSentenceVisible(button);
+}
+
+function renderSentencePractice(record = activeTranscriptRecord) {
+  const normalizedRecord = normalizeTranscriptRecord(record);
+  if (record && normalizedRecord) activeTranscriptRecord = normalizedRecord;
+  const cues = normalizeSentenceCues(normalizedRecord?.sentences);
+  sentenceList.replaceChildren();
+  sentenceButtons = [];
+  syncScript.dataset.view = settings.sentenceDisplayMode;
+  sentenceDisplayModeSelect.value = settings.sentenceDisplayMode;
+
+  cues.forEach((cue, index) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    const meta = document.createElement("span");
+    const english = document.createElement("span");
+    const translation = document.createElement("span");
+    button.className = "sentence-row";
+    button.type = "button";
+    button.setAttribute("aria-label", `${index + 1}文目、${formatTime(cue.start)}から再生`);
+    meta.className = "sentence-row__meta";
+    meta.textContent = `${String(index + 1).padStart(2, "0")} · ${formatTime(cue.start)}`;
+    english.className = "sentence-row__english";
+    english.textContent = cue.text;
+    translation.className = "sentence-row__translation";
+    translation.textContent = cue.translation || "和訳を生成しています。";
+    button.append(meta, english, translation);
+    button.addEventListener("click", () => playSentence(index));
+    item.append(button);
+    sentenceList.append(item);
+    sentenceButtons.push(button);
+  });
+
+  const timedWords = normalizeTimedWords(normalizedRecord?.words);
+  syncScript.hidden = cues.length === 0 && timedWords.length === 0;
+  sentencePlaybackIndex = sentenceIndexAtTime(audio.currentTime);
+  updateActiveSentence(sentencePlaybackIndex >= 0 ? sentencePlaybackIndex : 0, { scroll: false });
+  updateSentencePracticeStatus();
+  syncControls();
+}
+
+function cancelSentencePause({ clearPending = true, updateUi = true } = {}) {
+  window.clearTimeout(sentencePauseTimer);
+  window.clearInterval(sentenceCountdownTimer);
+  sentencePauseTimer = null;
+  sentenceCountdownTimer = null;
+  sentencePauseUntil = 0;
+  sentencePauseActive = false;
+  if (clearPending) pendingSentenceIndex = -1;
+  if (updateUi) updateSentencePracticeStatus();
+}
+
+function updateSentencePracticeStatus() {
+  const cues = sentenceCues();
+  if (cues.length === 0) {
+    practiceStatus.textContent = "英文を生成すると、文末で自動的にポーズします。";
+    delete practiceStatus.dataset.state;
+    return;
+  }
+  if (sentencePauseActive && pendingSentenceIndex >= 0) {
+    const remaining = Math.max(0, Math.ceil((sentencePauseUntil - Date.now()) / 1000));
+    practiceStatus.dataset.state = "paused";
+    practiceStatus.textContent = `リピーティング中 — あと${remaining}秒で${pendingSentenceIndex + 1}文目を再生します。`;
+    return;
+  }
+  if (pendingSentenceIndex >= 0 && settings.practiceMode === "manual") {
+    practiceStatus.dataset.state = "paused";
+    practiceStatus.textContent = `声に出して繰り返したら、再生ボタンで${pendingSentenceIndex + 1}文目へ進みます。`;
+    return;
+  }
+  if (sentenceBoundaryLock === cues.length - 1 && pendingSentenceIndex < 0 && audio.paused) {
+    practiceStatus.dataset.state = "paused";
+    practiceStatus.textContent = "最後の文まで終わりました。英文を選ぶと、その文から再開できます。";
+    return;
+  }
+  delete practiceStatus.dataset.state;
+  practiceStatus.textContent = settings.practiceMode === "manual"
+    ? "各文の後は∞ — 再生ボタンを押すまで停止します。"
+    : `各文の後に、文の再生時間の${settings.pauseRatio}倍だけ停止します。`;
+}
+
+async function playSentence(index, autoplay = true) {
+  const cues = sentenceCues();
+  const target = cues[index];
+  if (!target) return false;
+  cancelPracticePause(false);
+  cancelSentencePause({ updateUi: false });
+  sentenceBoundaryLock = -1;
+  sentencePlaybackIndex = index;
+  audio.currentTime = Math.max(0, target.start + 0.01);
+  updateActiveSentence(index);
+  updateTimeline();
+  if (!autoplay) {
+    updateSentencePracticeStatus();
+    return true;
+  }
+  try {
+    await audio.play();
+  } catch {
+    showStatus("この文を再生できませんでした。再生ボタンを押してください。", "error");
+  }
+  return true;
+}
+
+function pauseAtSentenceBoundary(index) {
+  const cues = sentenceCues();
+  const cue = cues[index];
+  if (!cue || sentenceBoundaryLock === index) return;
+  sentenceBoundaryLock = index;
+  sentencePlaybackIndex = index;
+  audio.pause();
+  updateActiveSentence(index);
+  pendingSentenceIndex = index < cues.length - 1 ? index + 1 : -1;
+  if (pendingSentenceIndex < 0) {
+    updateSentencePracticeStatus();
+    return;
+  }
+
+  if (settings.practiceMode === "manual") {
+    updateSentencePracticeStatus();
+    return;
+  }
+
+  const playedSeconds = (cue.end - cue.start) / Math.max(audio.playbackRate, 0.1);
+  const pauseSeconds = Math.max(0.5, playedSeconds * Number(settings.pauseRatio));
+  sentencePauseActive = true;
+  sentencePauseUntil = Date.now() + pauseSeconds * 1000;
+  updateSentencePracticeStatus();
+  sentenceCountdownTimer = window.setInterval(updateSentencePracticeStatus, 250);
+  sentencePauseTimer = window.setTimeout(() => {
+    const nextIndex = pendingSentenceIndex;
+    cancelSentencePause({ updateUi: false });
+    playSentence(nextIndex);
+  }, pauseSeconds * 1000);
+}
+
+function updateSentencePractice() {
+  const cues = sentenceCues();
+  if (cues.length === 0 || sentencePauseActive) return;
+  if (audio.paused) {
+    if (pendingSentenceIndex < 0) updateActiveSentence(sentenceIndexAtTime(audio.currentTime));
+    return;
+  }
+  if (currentLoop().enabled && validLoop(currentLoop())) return;
+  if (sentencePlaybackIndex < 0) sentencePlaybackIndex = sentenceIndexAtTime(audio.currentTime);
+  const cue = cues[sentencePlaybackIndex];
+  if (!cue) return;
+  updateActiveSentence(sentencePlaybackIndex);
+  if (audio.currentTime >= cue.end - 0.06) pauseAtSentenceBoundary(sentencePlaybackIndex);
+}
+
+function resumePendingSentence() {
+  if (pendingSentenceIndex < 0) return false;
+  const targetIndex = pendingSentenceIndex;
+  cancelSentencePause({ updateUi: false });
+  playSentence(targetIndex);
+  return true;
+}
+
+function unlockSentenceBoundary() {
+  cancelSentencePause({ updateUi: false });
+  sentenceBoundaryLock = -1;
+  sentencePlaybackIndex = sentenceIndexAtTime(audio.currentTime);
+  updateActiveSentence(sentencePlaybackIndex);
+  updateSentencePracticeStatus();
+}
+
+function resetSentencePractice() {
+  cancelSentencePause({ updateUi: false });
+  sentenceBoundaryLock = -1;
+  sentencePlaybackIndex = -1;
+  activeSentenceIndex = -1;
+  pendingSentenceIndex = -1;
+  sentenceButtons = [];
+}
+
 function wordCacheKey(text) {
   return text.toLocaleLowerCase("en").replace(/^[^a-z0-9']+|[^a-z0-9']+$/g, "") || text;
 }
@@ -1331,8 +1834,8 @@ function renderSynchronizedTranscript(words) {
   syncTranscript.replaceChildren();
   syncWordButtons = [];
   activeSyncWordIndex = -1;
-  syncScript.hidden = normalizedWords.length === 0;
   if (normalizedWords.length === 0) {
+    renderSentencePractice();
     renderCurrentTranslation();
     return;
   }
@@ -1351,6 +1854,7 @@ function renderSynchronizedTranscript(words) {
     syncWordButtons.push(button);
     syncTranscript.append(button);
   });
+  renderSentencePractice();
   renderCurrentTranslation();
   syncWordLoopRange();
   updateTranscriptHighlight();
@@ -1514,6 +2018,7 @@ function handleSynchronizedWord(word, index) {
   if (!audio.paused) {
     cancelPracticePause();
     audio.currentTime = Math.max(0, word.start);
+    unlockSentenceBoundary();
     updateTimeline();
     return;
   }
@@ -1602,6 +2107,7 @@ function resetTranscriptPanel() {
   window.clearTimeout(transcriptSaveTimer);
   transcriptEditorForcedTrackId = null;
   activeTranscriptRecord = null;
+  resetSentencePractice();
   transcriptOutput.value = "";
   delete transcriptOutput.dataset.state;
   transcriptOutput.disabled = true;
@@ -1633,17 +2139,23 @@ async function loadTranscript(track) {
     const record = await getStoredTranscript(track.id);
     if (currentTrack()?.id !== track.id) return;
     if (record?.text) {
-      activeTranscriptRecord = record;
-      transcriptOutput.value = record.text;
+      activeTranscriptRecord = normalizeTranscriptRecord(record);
+      transcriptOutput.value = activeTranscriptRecord.text;
       transcriptOutput.dataset.state = "success";
       saveTranscriptButton.disabled = false;
       deleteTranscriptButton.disabled = false;
       showTranscriptButton.disabled = false;
       transcriptStatus.dataset.state = "success";
       transcriptStatus.textContent = "この音声の保存済みスクリプトを表示しています。";
-      updateTrackLearningState(track.id, record);
-      renderSynchronizedTranscript(record.words || []);
-      renderTranslation(record.translation || "");
+      updateTrackLearningState(track.id, activeTranscriptRecord);
+      renderSynchronizedTranscript(activeTranscriptRecord.words || []);
+      renderTranslation(activeTranscriptRecord.translation || "");
+      if (
+        normalizeSentenceCues(activeTranscriptRecord.sentences).some((sentence) => !sentence.translation)
+        && getTranslationAccessKey()
+      ) {
+        startTranslation(activeTranscriptRecord);
+      }
     } else {
       activeTranscriptRecord = null;
       updateTrackLearningState(track.id, null);
@@ -1701,6 +2213,12 @@ async function startTranscription() {
   const requestTimeout = window.setTimeout(() => requestController.abort(), 90_000);
 
   try {
+    const uploadBody = track.file instanceof Blob
+      ? track.file
+      : await fetch(track.url, { signal: requestController.signal }).then((response) => {
+        if (!response.ok) throw new Error("Native audio cache is unavailable");
+        return response.blob();
+      });
     const response = await fetch(TRANSCRIPTION_API_URL, {
       method: "POST",
       headers: {
@@ -1709,7 +2227,7 @@ async function startTranscription() {
         "X-Audio-Filename": encodeURIComponent(track.file.name),
         "X-Audio-Type": track.file.type || "application/octet-stream",
       },
-      body: track.file,
+      body: uploadBody,
       signal: requestController.signal,
     });
     let payload = {};
@@ -1730,10 +2248,14 @@ async function startTranscription() {
       return;
     }
 
+    const words = normalizeTimedWords(payload.words);
+    const segments = normalizeTimedSegments(payload.segments);
     const record = {
       id: track.id,
       text,
-      words: normalizeTimedWords(payload.words),
+      words,
+      segments,
+      sentences: buildSentenceCues(words, segments, text, audio.duration),
       translation: "",
       wordTranslations: {},
       source: payload.source || "openai-whisper-1",
@@ -1755,10 +2277,11 @@ async function startTranscription() {
       deleteTranscriptButton.disabled = false;
       showTranscriptButton.disabled = false;
       transcriptStatus.dataset.state = "success";
-      transcriptStatus.textContent = "英文を生成し、このブラウザに保存しました。再生リストから和訳も生成できます。";
+      transcriptStatus.textContent = "英文を文ごとに分け、このブラウザに保存しました。続けて和訳を生成しています。";
       renderSynchronizedTranscript(record.words);
       renderTranslation("");
       revealTranscriptEditor();
+      startTranslation(record);
     } else {
       showStatus(`${track.file.name}の英語スクリプトを保存しました。`);
     }
@@ -1807,7 +2330,10 @@ function transcriptionErrorMessage(error) {
 
 function startTranslation(record, force = false) {
   if (!record?.id || !record.text || translatingTrackId) return;
-  if (record.translation && !force) {
+  const existingSentences = normalizeSentenceCues(record.sentences);
+  const hasCompleteSentenceTranslations = existingSentences.length > 0
+    && existingSentences.every((sentence) => sentence.translation);
+  if (record.translation && !force && (existingSentences.length === 0 || hasCompleteSentenceTranslations)) {
     if (currentTrack()?.id === record.id) renderTranslation(record.translation);
     return;
   }
@@ -1829,10 +2355,16 @@ function startTranslation(record, force = false) {
     translationStatus.textContent = "OpenAI APIで日本語訳を生成しています。";
     renderCurrentTranslation();
   }
-  requestOpenAITranslation({ purpose: "full", id: record.id, text: record.text });
+  const sentences = normalizeSentenceCues(record.sentences);
+  requestOpenAITranslation({
+    purpose: sentences.length > 0 ? "sentences" : "full",
+    id: record.id,
+    text: record.text,
+    sentences,
+  });
 }
 
-async function requestOpenAITranslation({ purpose, id, key = "", text }) {
+async function requestOpenAITranslation({ purpose, id, key = "", text, sentences = [] }) {
   const accessKey = getTranslationAccessKey();
   const requestKey = `${id}:${key}`;
   if (!accessKey) return;
@@ -1848,7 +2380,13 @@ async function requestOpenAITranslation({ purpose, id, key = "", text }) {
         "Content-Type": "application/json",
         "X-Translation-Key": accessKey,
       },
-      body: JSON.stringify({ type: purpose, text }),
+      body: JSON.stringify({
+        type: purpose,
+        text,
+        sentences: purpose === "sentences"
+          ? normalizeSentenceCues(sentences).map((sentence) => ({ id: sentence.id, text: sentence.text }))
+          : undefined,
+      }),
     });
     let payload = {};
     try {
@@ -1861,11 +2399,16 @@ async function requestOpenAITranslation({ purpose, id, key = "", text }) {
       error.status = response.status;
       throw error;
     }
-    const translation = String(payload.translation || "").trim();
+    const translations = Array.isArray(payload.translations)
+      ? payload.translations.map((value) => String(value || "").trim())
+      : [];
+    const translation = String(payload.translation || translations.join("\n") || "").trim();
     if (!translation) throw new Error("Empty translation");
 
     const existing = await getStoredTranscript(id);
     if (!existing?.text) return;
+    const storedSentences = normalizeSentenceCues(existing.sentences);
+    const sentenceSource = storedSentences.length > 0 ? storedSentences : normalizeSentenceCues(sentences);
     const updatedRecord = purpose === "word"
       ? {
           ...existing,
@@ -1874,7 +2417,17 @@ async function requestOpenAITranslation({ purpose, id, key = "", text }) {
             [key]: translation,
           },
         }
-      : {
+      : purpose === "sentences"
+        ? {
+            ...existing,
+            sentences: sentenceSource.map((sentence, index) => ({
+              ...sentence,
+              translation: translations[index] || sentence.translation || "",
+            })),
+            translation,
+            translatedAt: new Date().toISOString(),
+          }
+        : {
           ...existing,
           translation,
           translatedAt: new Date().toISOString(),
@@ -1889,6 +2442,7 @@ async function requestOpenAITranslation({ purpose, id, key = "", text }) {
       }
     } else if (currentTrack()?.id === id) {
       renderTranslation(translation);
+      renderSentencePractice(updatedRecord);
     }
   } catch (error) {
     console.error("OpenAI translation failed:", error);
@@ -1956,6 +2510,10 @@ async function saveTranscript() {
     id: track.id,
     text,
     words: textChanged ? [] : (activeTranscriptRecord?.words || []),
+    segments: textChanged ? [] : (activeTranscriptRecord?.segments || []),
+    sentences: textChanged
+      ? buildSentenceCues([], [], text, audio.duration)
+      : (activeTranscriptRecord?.sentences || []),
     translation: textChanged ? "" : (activeTranscriptRecord?.translation || ""),
     wordTranslations: textChanged ? {} : (activeTranscriptRecord?.wordTranslations || {}),
     source: "edited",
@@ -2134,6 +2692,12 @@ function toggleLoop() {
 
 async function startPlayback() {
   if (!currentTrack()) return;
+  if (resumePendingSentence()) return;
+  const cues = sentenceCues();
+  if (cues.length > 0 && sentenceBoundaryLock === cues.length - 1 && pendingSentenceIndex < 0) {
+    await playSentence(0);
+    return;
+  }
   if (isPracticePause && pendingPracticeTargetIndex >= 0) {
     const nextIndex = pendingPracticeTargetIndex;
     cancelPracticePause(false);
@@ -2141,6 +2705,10 @@ async function startPlayback() {
     return;
   }
   cancelPracticePause();
+  if (cues.length > 0) {
+    sentenceBoundaryLock = -1;
+    sentencePlaybackIndex = sentenceIndexAtTime(audio.currentTime);
+  }
   try {
     await audio.play();
   } catch {
@@ -2150,6 +2718,7 @@ async function startPlayback() {
 
 function pausePlayback() {
   cancelPracticePause();
+  cancelSentencePause();
   audio.pause();
   setMediaSessionPlaybackState("paused");
 }
@@ -2162,11 +2731,18 @@ async function togglePlayback() {
 function skipBy(seconds) {
   if (!currentTrack() || !Number.isFinite(audio.duration)) return;
   audio.currentTime = Math.min(audio.duration, Math.max(0, audio.currentTime + seconds));
+  unlockSentenceBoundary();
   updateTimeline();
 }
 
 function goToPrevious() {
   if (!currentTrack()) return;
+  const cues = sentenceCues();
+  if (cues.length > 0) {
+    const baseIndex = activeSentenceIndex >= 0 ? activeSentenceIndex : sentenceIndexAtTime(audio.currentTime);
+    playSentence(Math.max(0, baseIndex - 1));
+    return;
+  }
   if (audio.currentTime > 3 || currentIndex === 0) {
     audio.currentTime = 0;
     return;
@@ -2175,6 +2751,12 @@ function goToPrevious() {
 }
 
 function goToNext(autoplay = !audio.paused) {
+  const cues = sentenceCues();
+  if (cues.length > 0) {
+    const baseIndex = activeSentenceIndex >= 0 ? activeSentenceIndex : sentenceIndexAtTime(audio.currentTime);
+    playSentence(Math.min(cues.length - 1, baseIndex + 1), true);
+    return;
+  }
   if (currentIndex < tracks.length - 1) selectTrack(currentIndex + 1, autoplay);
   else if (tracks.length > 0) selectTrack(0, autoplay);
 }
@@ -2210,6 +2792,7 @@ function updateTimeline() {
   if (loop.enabled && validLoop(loop) && audio.currentTime >= loop.b - 0.04) {
     audio.currentTime = loop.a;
   }
+  updateSentencePractice();
 
   if (Date.now() - lastPositionSave > 3000) {
     saveCurrentPosition();
@@ -2227,6 +2810,7 @@ function saveCurrentPosition() {
 }
 
 function updateMediaSession(track) {
+  pushNativeMediaSession(audio.paused ? "paused" : "playing", track, true);
   if (!("mediaSession" in navigator)) return;
   setupMediaSessionActionHandlers();
   if ("MediaMetadata" in window) {
@@ -2245,6 +2829,7 @@ function updateMediaSession(track) {
 }
 
 function setMediaSessionPlaybackState(state) {
+  pushNativeMediaSession(state, currentTrack(), true);
   if (!("mediaSession" in navigator)) return;
   try {
     navigator.mediaSession.playbackState = state;
@@ -2254,6 +2839,7 @@ function setMediaSessionPlaybackState(state) {
 }
 
 function updateMediaSessionPosition() {
+  pushNativeMediaSession(audio.paused ? "paused" : "playing", currentTrack());
   if (!("mediaSession" in navigator) || typeof navigator.mediaSession.setPositionState !== "function") return;
   const duration = Number(audio.duration);
   const position = Number(audio.currentTime);
@@ -2282,6 +2868,10 @@ function stopFromMediaControl() {
 }
 
 function setupMediaSessionActionHandlers() {
+  if (nativeAudioLibrarySupported) {
+    setupNativeMediaSessionActionHandlers();
+    return;
+  }
   if (!("mediaSession" in navigator)) return;
 
   const handlers = {
@@ -2301,6 +2891,65 @@ function setupMediaSessionActionHandlers() {
     } catch {
       // Unsupported Media Session actions are safe to ignore.
     }
+  });
+}
+
+function pushNativeMediaSession(state, track, force = false) {
+  if (!nativeAudioLibrarySupported) return;
+  const now = Date.now();
+  if (!force && now - lastNativeMediaSessionUpdate < 750) return;
+  lastNativeMediaSessionUpdate = now;
+  const duration = Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0;
+  const position = Number.isFinite(audio.currentTime) ? Math.round(audio.currentTime * 1000) : 0;
+  nativeAudioLibrary.updateMediaSession({
+    state,
+    title: track?.file?.name?.replace(/\.[^.]+$/, "") || "Listening Desk",
+    duration,
+    position,
+    rate: Math.max(0.1, Number(audio.playbackRate) || 1),
+  }).catch(() => {
+    // Playback continues even if Android's media controls are temporarily unavailable.
+  });
+}
+
+function setupNativeMediaSessionActionHandlers() {
+  if (!nativeAudioLibrarySupported || nativeMediaListenerInstalled) return;
+  nativeMediaListenerInstalled = true;
+  nativeAudioLibrary.addListener("mediaCommand", (event) => {
+    switch (event?.command) {
+      case "play":
+        startPlayback();
+        break;
+      case "pause":
+        pausePlayback();
+        break;
+      case "previous":
+        changeTrackFromMediaControl(-1);
+        break;
+      case "next":
+        changeTrackFromMediaControl(1);
+        break;
+      case "rewind":
+        skipBy(-MEDIA_SEEK_BACKWARD_SECONDS);
+        break;
+      case "forward":
+        skipBy(MEDIA_SEEK_FORWARD_SECONDS);
+        break;
+      case "seekTo":
+        if (Number.isFinite(Number(event.position))) {
+          audio.currentTime = Math.max(0, Number(event.position) / 1000);
+          unlockSentenceBoundary();
+          updateTimeline();
+        }
+        break;
+      case "stop":
+        stopFromMediaControl();
+        break;
+      default:
+        break;
+    }
+  }).catch(() => {
+    nativeMediaListenerInstalled = false;
   });
 }
 
@@ -2328,6 +2977,7 @@ function seekToFromMediaControl(details) {
   } else {
     audio.currentTime = targetTime;
   }
+  unlockSentenceBoundary();
   updateTimeline();
 }
 
@@ -2353,13 +3003,15 @@ function syncConnectionState() {
   connectionStatus.textContent = navigator.onLine ? "オンライン" : "オフラインで利用中";
 }
 
-const fileHandleSelectionSupported = typeof window.showOpenFilePicker === "function";
-const directoryHandleSelectionSupported = typeof window.showDirectoryPicker === "function";
-const folderSelectionSupported = directoryHandleSelectionSupported || "webkitdirectory" in folderInput;
+const fileHandleSelectionSupported = nativeAudioLibrarySupported || typeof window.showOpenFilePicker === "function";
+const directoryHandleSelectionSupported = nativeAudioLibrarySupported || typeof window.showDirectoryPicker === "function";
+const folderSelectionSupported = nativeAudioLibrarySupported || directoryHandleSelectionSupported || "webkitdirectory" in folderInput;
 if (!folderSelectionSupported) {
   chooseFolderButton.disabled = true;
   addNextFiveButton.disabled = true;
   folderSupportNote.textContent = "このブラウザはフォルダ選択に対応していません。複数ファイルを選んで追加してください。";
+} else if (nativeAudioLibrarySupported) {
+  folderSupportNote.textContent = "Android版では選択した音声の参照先を保存し、次回起動時に自動復元します。";
 } else if (!fileHandleSelectionSupported || !directoryHandleSelectionSupported) {
   folderSupportNote.textContent = "フォルダ内の音声をまとめて追加できます。このブラウザでは参照先を保存できないため、次回起動時は音声を選び直してください。";
 }
@@ -2384,7 +3036,7 @@ filePickerButton.addEventListener("click", () => openSettingsDialog(importDialog
 importDialogClose.addEventListener("click", () => importDialog.close());
 chooseFilesButton.addEventListener("click", () => {
   importDialog.close();
-  if (fileHandleSelectionSupported) {
+  if (nativeAudioLibrarySupported || fileHandleSelectionSupported) {
     chooseFilesWithHandles();
   } else {
     fileInput.click();
@@ -2433,11 +3085,8 @@ setAButton.addEventListener("click", () => setLoopPoint("a"));
 setBButton.addEventListener("click", () => setLoopPoint("b"));
 clearLoopButton.addEventListener("click", clearLoop);
 loopToggleButton.addEventListener("click", toggleLoop);
-manualNextModeButton.addEventListener("click", () => setPracticeMode("manual"));
-autoNextModeButton.addEventListener("click", () => setPracticeMode("auto"));
 practiceSettingsButton.addEventListener("click", () => {
-  const selectedModeButton = settings.practiceMode === "auto" ? autoNextModeButton : manualNextModeButton;
-  openSettingsDialog(practiceSettingsDialog, selectedModeButton);
+  openSettingsDialog(practiceSettingsDialog, pauseRatioSelect);
 });
 playbackRateSettingsButton.addEventListener("click", () => openSettingsDialog(playbackRateDialog, rateSelect));
 playbackSettingsButton.addEventListener("click", () => openSettingsDialog(playbackSettingsDialog, playbackModeSelect));
@@ -2452,12 +3101,24 @@ closeSettingsOnBackdrop(playbackRateDialog);
 closeSettingsOnBackdrop(playbackSettingsDialog);
 
 pauseRatioSelect.addEventListener("change", () => {
-  settings.pauseRatio = Number(pauseRatioSelect.value);
+  const selectedValue = pauseRatioSelect.value;
+  settings.practiceMode = selectedValue === "manual" ? "manual" : "auto";
+  if (settings.practiceMode === "auto") settings.pauseRatio = Number(selectedValue);
   writeStored(SETTINGS_KEY, settings);
   if (isPracticePause) {
     cancelPracticePause();
   }
+  if (sentencePauseActive || pendingSentenceIndex >= 0) {
+    cancelSentencePause();
+  }
   syncPracticeUi();
+});
+
+sentenceDisplayModeSelect.addEventListener("change", () => {
+  settings.sentenceDisplayMode = sentenceDisplayModeSelect.value === "scroll" ? "scroll" : "focus";
+  writeStored(SETTINGS_KEY, settings);
+  syncScript.dataset.view = settings.sentenceDisplayMode;
+  updateActiveSentence(activeSentenceIndex >= 0 ? activeSentenceIndex : 0);
 });
 
 transcribeButton.addEventListener("click", startTranscription);
@@ -2586,6 +3247,7 @@ transcriptOutput.addEventListener("input", () => {
   showTranscriptButton.disabled = !hasText;
   const unchanged = transcriptOutput.value.trim() === activeTranscriptRecord?.text;
   renderSynchronizedTranscript(unchanged ? activeTranscriptRecord?.words : []);
+  if (!unchanged) syncScript.hidden = true;
   renderTranslation(unchanged ? activeTranscriptRecord?.translation : "");
 });
 
@@ -2594,6 +3256,7 @@ playWordButton.addEventListener("click", async () => {
   if (wordDialog.open) wordDialog.close();
   cancelPracticePause();
   audio.currentTime = Math.max(0, selectedWord.start);
+  unlockSentenceBoundary();
   updateTimeline();
   try {
     await audio.play();
@@ -2652,7 +3315,10 @@ rateSelect.addEventListener("change", () => {
 });
 
 seek.addEventListener("input", () => {
-  if (Number.isFinite(audio.duration)) audio.currentTime = Number(seek.value);
+  if (Number.isFinite(audio.duration)) {
+    audio.currentTime = Number(seek.value);
+    unlockSentenceBoundary();
+  }
 });
 
 audio.addEventListener("loadedmetadata", () => {
@@ -2664,6 +3330,7 @@ audio.addEventListener("loadedmetadata", () => {
     audio.currentTime = savedPosition;
   }
   updateTimeline();
+  if (activeTranscriptRecord?.text) renderSentencePractice(activeTranscriptRecord);
   updateMediaSession(track);
   renderLibrary();
   if (pendingAutoplay) {
@@ -2685,6 +3352,9 @@ audio.addEventListener("play", () => {
   playButton.setAttribute("aria-label", "一時停止");
   setMediaSessionPlaybackState("playing");
   requestWakeLock();
+  if (hasSentenceCues() && sentencePlaybackIndex < 0) {
+    sentencePlaybackIndex = sentenceIndexAtTime(audio.currentTime);
+  }
   syncPracticeUi();
 });
 
@@ -2697,6 +3367,11 @@ audio.addEventListener("pause", () => {
 });
 
 audio.addEventListener("ended", () => {
+  const cues = sentenceCues();
+  if (cues.length > 0) {
+    pauseAtSentenceBoundary(cues.length - 1);
+    return;
+  }
   cancelPracticePause(false);
   const targetIndex = nextTargetAfterEnded();
   if (targetIndex < 0) {
@@ -2758,8 +3433,9 @@ window.addEventListener("pageshow", () => {
 
 window.addEventListener("beforeunload", () => {
   cancelPracticePause(false);
+  cancelSentencePause({ updateUi: false });
   saveCurrentPosition();
-  tracks.forEach((track) => URL.revokeObjectURL(track.url));
+  tracks.forEach(releaseTrackUrl);
 });
 window.addEventListener("online", syncConnectionState);
 window.addEventListener("offline", syncConnectionState);
@@ -2789,7 +3465,7 @@ window.addEventListener("appinstalled", () => {
 setupMediaSessionActionHandlers();
 restoreSavedPlaylist();
 
-if ("serviceWorker" in navigator) {
+if (!nativeAudioLibrarySupported && "serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
       await navigator.serviceWorker.register("./sw.js", { scope: "./" });

@@ -1,10 +1,10 @@
-const CACHE_NAME = "listening-desk-v46";
+const CACHE_NAME = "listening-desk-v48";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=46",
-  "./tokens.css?v=46",
-  "./app.js?v=46",
+  "./styles.css?v=48",
+  "./tokens.css?v=48",
+  "./app.js?v=48",
   "./manifest.webmanifest",
   "./icons/app-icon.svg",
   "./icons/app-icon-192.png",

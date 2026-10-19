@@ -42,6 +42,22 @@ function outputText(response) {
     .trim();
 }
 
+function parseSentenceTranslations(value, expectedCount) {
+  const raw = String(value || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  const translations = Array.isArray(parsed) ? parsed : parsed?.translations;
+  if (!Array.isArray(translations) || translations.length !== expectedCount) return [];
+  return translations.map((translation) => String(translation || "").trim());
+}
+
 module.exports = async function translate(req, res) {
   const origin = req.headers.origin;
   res.setHeader("Cache-Control", "no-store");
@@ -75,16 +91,32 @@ module.exports = async function translate(req, res) {
   if (body.type === "validate") {
     return res.status(200).json({ ok: true });
   }
-  const type = body.type === "word" ? "word" : "full";
+  const type = body.type === "word" ? "word" : (body.type === "sentences" ? "sentences" : "full");
   const text = String(body.text || "").trim();
+  const sentences = type === "sentences" && Array.isArray(body.sentences)
+    ? body.sentences
+        .map((sentence, index) => ({
+          id: String(sentence?.id || `sentence-${index + 1}`),
+          text: String(sentence?.text || "").trim(),
+        }))
+        .filter((sentence) => sentence.text)
+    : [];
   const maximumLength = type === "word" ? 100 : 30_000;
-  if (!text || text.length > maximumLength) {
+  const inputLength = type === "sentences"
+    ? sentences.reduce((total, sentence) => total + sentence.text.length, 0)
+    : text.length;
+  if ((type === "sentences" ? sentences.length === 0 || sentences.length > 200 : !text) || inputLength > maximumLength) {
     return res.status(400).json({ error: "Invalid text" });
   }
 
   const instructions = type === "word"
     ? "Translate the English word or short expression into concise, natural Japanese. Return only the Japanese meaning, without labels or explanation."
-    : "Translate the English learning transcript into accurate, natural Japanese. Preserve paragraph breaks. Return only the Japanese translation, without labels, notes, or Markdown.";
+    : type === "sentences"
+      ? "Translate each English sentence into accurate, natural Japanese for an English learner. Keep exactly the same order and count. Return only a JSON object with one key named translations whose value is an array of Japanese strings. Do not add labels, notes, or Markdown."
+      : "Translate the English learning transcript into accurate, natural Japanese. Preserve paragraph breaks. Return only the Japanese translation, without labels, notes, or Markdown.";
+  const input = type === "sentences"
+    ? JSON.stringify({ sentences: sentences.map((sentence) => sentence.text) })
+    : text;
 
   try {
     const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
@@ -97,7 +129,7 @@ module.exports = async function translate(req, res) {
         model: process.env.OPENAI_MODEL || "gpt-5.6-luna",
         reasoning: { effort: "none" },
         instructions,
-        input: text,
+        input,
         store: false,
         max_output_tokens: type === "word" ? 120 : 12_000,
       }),
@@ -108,7 +140,15 @@ module.exports = async function translate(req, res) {
       return res.status(status).json({ error: "OpenAI request failed" });
     }
 
-    const translation = outputText(await openAIResponse.json());
+    const output = outputText(await openAIResponse.json());
+    if (type === "sentences") {
+      const translations = parseSentenceTranslations(output, sentences.length);
+      if (translations.length !== sentences.length || translations.some((translation) => !translation)) {
+        return res.status(502).json({ error: "OpenAI returned invalid sentence translations" });
+      }
+      return res.status(200).json({ translations, translation: translations.join("\n") });
+    }
+    const translation = output;
     if (!translation) return res.status(502).json({ error: "OpenAI returned no translation" });
     return res.status(200).json({ translation });
   } catch (error) {

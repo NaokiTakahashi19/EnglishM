@@ -116,6 +116,7 @@ module.exports = async function transcribe(req, res) {
   form.append("language", "en");
   form.append("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "word");
+  form.append("timestamp_granularities[]", "segment");
 
   try {
     const openAIResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
@@ -140,8 +141,17 @@ module.exports = async function transcribe(req, res) {
           }))
           .filter((word) => word.text && Number.isFinite(word.start))
       : [];
+    const segments = Array.isArray(result.segments)
+      ? result.segments
+          .map((segment) => ({
+            text: String(segment.text || "").trim(),
+            start: Number(segment.start),
+            end: Number(segment.end),
+          }))
+          .filter((segment) => segment.text && Number.isFinite(segment.start))
+      : [];
     if (!text) return res.status(502).json({ error: "OpenAI returned no transcript" });
-    return res.status(200).json({ text, words, source: "openai-whisper-1" });
+    return res.status(200).json({ text, words, segments, source: "openai-whisper-1" });
   } catch (error) {
     console.error("Transcription endpoint failed", error);
     return res.status(502).json({ error: "Transcription request failed" });

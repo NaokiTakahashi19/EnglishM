@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#f4efe4" />
-    <meta name="description" content="端末内の英語学習用音声を、速度変更やA–Bリピートで聞けるオフライン対応プレイヤー。" />
+    <meta name="description" content="長い英語音声を文ごとに止め、英文と和訳を見ながらリピーティングできるPWA。" />
     <script>
       (() => {
         try {
@@ -26,8 +26,8 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=46" />
-    <title>Listening Desk — 英語音声プレイヤー</title>
+    <link rel="stylesheet" href="./styles.css?v=48" />
+    <title>Listening Desk — 文ごとにリピーティング</title>
   </head>
   <body>
     <header class="nav-edge" aria-label="アプリヘッダー">
@@ -210,10 +210,6 @@
               英文 / 日本語訳
             </button>
           </section>
-          <p class="visually-hidden" id="practice-status" aria-live="polite">
-            ファイル終了後、再生ボタンを押すまで次の音声を待ちます。
-          </p>
-
           <dialog class="word-dialog settings-dialog" id="playback-rate-dialog" aria-labelledby="playback-rate-dialog-title" tabindex="-1">
             <div class="word-dialog__inner">
               <p class="word-dialog__label">再生設定</p>
@@ -270,26 +266,20 @@
             <div class="word-dialog__inner">
               <p class="word-dialog__label">リピーティング設定</p>
               <h3 id="practice-settings-title">自動ポーズ</h3>
-              <p class="settings-dialog__note">再生後に、声に出して繰り返すための待ち時間と進み方を変更します。</p>
-              <div class="practice-modes" role="group" aria-label="自動ポーズ方式">
-                <button class="control control--quiet practice-mode" id="manual-next-mode-button" type="button" aria-pressed="true">
-                  手動で次へ
-                </button>
-                <button class="control control--quiet practice-mode" id="auto-next-mode-button" type="button" aria-pressed="false">
-                  待って自動再生
-                </button>
-              </div>
-
+              <p class="settings-dialog__note">英文1文の再生時間を基準に、声に出して繰り返す時間を決めます。∞では再生ボタンを押すまで止まります。</p>
               <div class="practice-settings">
                 <div class="field-group">
-                  <label for="pause-ratio">自動ポーズの長さ</label>
-                  <select id="pause-ratio" class="field-control" disabled>
+                  <label for="pause-ratio">文の後のポーズ</label>
+                  <select id="pause-ratio" class="field-control">
+                    <option value="manual">∞（再生ボタンまで停止）</option>
                     <option value="0.7">再生時間の0.7倍</option>
                     <option value="0.8">再生時間の0.8倍</option>
                     <option value="0.9">再生時間の0.9倍</option>
                     <option value="1">再生時間と同じ</option>
                     <option value="1.1">再生時間の1.1倍</option>
                     <option value="1.2" selected>再生時間の1.2倍</option>
+                    <option value="1.3">再生時間の1.3倍</option>
+                    <option value="1.4">再生時間の1.4倍</option>
                     <option value="1.5">再生時間の1.5倍</option>
                   </select>
                 </div>
@@ -356,7 +346,7 @@
                 <h3 id="transcript-settings-title">生成と編集</h3>
                 <p class="settings-dialog__note">音声から英文を生成し、表示された内容を修正して保存できます。英文生成と日本語訳は同じ共通API設定を使います。</p>
                 <div class="word-dialog__actions">
-                  <button class="control control--primary" id="transcribe-button" type="button" disabled>音声から生成</button>
+                  <button class="control control--primary" id="transcribe-button" type="button" disabled>英文と和訳を生成</button>
                   <button class="control control--quiet" id="show-transcript-button" type="button" disabled>表示・編集</button>
                   <button class="control control--quiet" id="translation-settings-button" type="button">共通API設定</button>
                   <button class="control control--quiet" id="transcript-settings-close" type="button">閉じる</button>
@@ -365,10 +355,10 @@
             </dialog>
 
             <div class="transcript-content" id="transcript-content">
-              <section class="sync-script" id="sync-script" aria-labelledby="sync-script-title" hidden>
+              <section class="sync-script" id="sync-script" aria-labelledby="sync-script-title" hidden data-view="focus">
                 <div class="sync-script__heading">
                   <div class="sync-script__title-row">
-                    <h4 id="sync-script-title">音声同期スクリプト</h4>
+                    <h4 id="sync-script-title">文ごとにリピーティング</h4>
                     <button
                       class="control control--text sync-translation-button"
                       id="current-translation-button"
@@ -379,10 +369,27 @@
                       日本語訳を見る
                     </button>
                   </div>
-                  <p>現在の英文を自動で追いかけます。単語を選ぶと、再生中はその位置へ移動し、停止中は単語訳を表示します。</p>
+                  <div class="sentence-view-control">
+                    <label for="sentence-display-mode">英文の表示</label>
+                    <select id="sentence-display-mode" class="field-control">
+                      <option value="focus">現在の1文</option>
+                      <option value="scroll">スクロール全文</option>
+                    </select>
+                  </div>
+                  <p>英文を選ぶと、その文の先頭から再生します。</p>
                 </div>
-                <div class="sync-transcript" id="sync-transcript" aria-label="単語を選択できる英語スクリプト"></div>
-                <p class="sync-script__note">単語位置は音声認識による推定値のため、無音部分では多少ずれることがあります。</p>
+                <article class="current-sentence" id="current-sentence" aria-live="polite">
+                  <p class="current-sentence__position" id="current-sentence-position">— / —</p>
+                  <p class="current-sentence__english" id="current-sentence-english">英文を生成すると、現在の1文がここに表示されます。</p>
+                  <p class="current-sentence__translation" id="current-sentence-translation">和訳も文ごとに表示されます。</p>
+                </article>
+                <p class="sentence-practice-status" id="practice-status" aria-live="polite">英文を生成すると、文末で自動的にポーズします。</p>
+                <ol class="sentence-list" id="sentence-list" aria-label="英文と和訳の一覧"></ol>
+                <details class="word-timing-details">
+                  <summary>単語単位で確認</summary>
+                  <div class="sync-transcript" id="sync-transcript" aria-label="単語を選択できる英語スクリプト"></div>
+                </details>
+                <p class="sync-script__note">文と単語の位置は音声認識による推定値のため、無音部分では多少ずれることがあります。</p>
               </section>
             </div>
 
@@ -603,15 +610,16 @@
       </section>
     </main>
 
-    <footer class="foot-dense">
-      <button class="control control--text foot-dense__info" id="app-info-button" type="button" aria-haspopup="dialog">
+    <footer class="foot-mast">
+      <p class="foot-mast__wordmark">Listening Desk</p>
+      <button class="control control--text foot-mast__info" id="app-info-button" type="button" aria-haspopup="dialog">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="8" />
           <path d="M12 11v5M12 8h.01" />
         </svg>
         <span>データの扱い</span>
       </button>
-      <span class="foot-dense__connection" id="connection-status" aria-live="polite">接続状態を確認中</span>
+      <span class="foot-mast__connection" id="connection-status" aria-live="polite">接続状態を確認中</span>
     </footer>
 
     <dialog class="word-dialog settings-dialog app-info-dialog" id="app-info-dialog" aria-labelledby="app-info-title" tabindex="-1">
@@ -628,8 +636,8 @@
             <dd>英文生成時は音声を、日本語訳の生成時は英文または選択した単語を送信します。</dd>
           </div>
           <div>
-            <dt>このブラウザに保存</dt>
-            <dd>設定・前回位置・英文・単語時刻・日本語訳に加え、対応ブラウザでは音声の参照先と再生リストを記録します。音声本体はコピーしません。</dd>
+            <dt>この端末に保存</dt>
+            <dd>設定・前回位置・英文・単語時刻・日本語訳を保存します。Androidアプリでは音声の参照先と再生リストも記録し、次回起動時に自動復元します。音声本体は恒久コピーしません。</dd>
           </div>
         </dl>
         <div class="word-dialog__actions">
@@ -640,6 +648,6 @@
 
     <div class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./app.js?v=46"></script>
+    <script type="module" src="./app.js?v=48"></script>
   </body>
 </html>

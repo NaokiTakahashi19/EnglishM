@@ -1,0 +1,13 @@
+{
+  "appId": "com.naokitakahashi.listeningdesk",
+  "appName": "Listening Desk",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

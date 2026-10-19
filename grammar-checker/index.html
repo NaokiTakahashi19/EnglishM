@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="中高生向けの英文法チェック。英文中の誤りを色分けし、日本語の解説と修正文を表示します。"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;700&family=Newsreader:opsz,wght@6..72,300;6..72,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>英作文チェック — 英文法チェック</title>
+  </head>
+  <body>
+    <header class="masthead">
+      <h1 class="masthead__name"><a href="#checker">英作文チェック</a></h1>
+      <div class="masthead__rule" aria-hidden="true"></div>
+    </header>
+
+    <main id="checker" class="app-shell">
+      <section class="page-intro" aria-label="英文法チェックの説明">
+        <div class="page-intro__copy">
+          <p>
+            英文を入力すると、文法・語形・構文・表現・スペルの誤りを色分けします。色の付いた箇所にマウスを合わせるか、キーボードで選ぶか、タップすると解説を確認できます。
+          </p>
+          <p class="page-intro__note">入力した英文だけを、文法チェックのためにOpenAIへ送信します。</p>
+        </div>
+      </section>
+
+      <section class="checker-stage" aria-label="英文法チェック">
+        <section class="editor-pane" aria-labelledby="editor-title">
+          <div class="pane-heading">
+            <h2 id="editor-title">英文を入力</h2>
+            <p>1文でも、複数の段落でも確認できます。</p>
+          </div>
+
+          <label class="field-label" for="source-text">チェックする英文</label>
+          <textarea
+            class="source-text"
+            id="source-text"
+            rows="14"
+            maxlength="12000"
+            placeholder="I have study hard for the entrance exam."
+            aria-describedby="field-message character-count"
+            aria-required="true"
+          ></textarea>
+          <div class="field-meta">
+            <p class="field-message" id="field-message">英文を1文字以上入力してください。</p>
+            <p class="character-count" id="character-count">0 / 12,000</p>
+          </div>
+
+          <div class="editor-actions">
+            <button class="button button--primary" id="check-button" type="button" disabled>
+              <span id="check-button-label">文法チェック</span>
+            </button>
+            <button class="button button--quiet" id="settings-button" type="button">接続設定</button>
+          </div>
+          <p class="request-status" id="request-status" aria-live="polite"></p>
+        </section>
+
+        <section class="result-pane" aria-labelledby="result-title" aria-live="polite">
+          <div class="pane-heading">
+            <h2 id="result-title">チェック結果</h2>
+            <p>色の付いた箇所を選ぶと、間違いの種類と直し方が分かります。</p>
+          </div>
+
+          <div class="empty-result" id="empty-result">
+            <p>文法チェックの結果は、ここに表示されます。</p>
+          </div>
+
+          <div class="result-content" id="result-content" hidden>
+            <div class="result-summary">
+              <p class="result-count" id="result-count"></p>
+              <p class="result-summary__note">色付き箇所はマウス・キーボード・タップで確認できます</p>
+            </div>
+
+            <ul class="legend" aria-label="エラー分類">
+              <li class="legend__item"><span class="legend__swatch legend__swatch--major"></span>主要文法</li>
+              <li class="legend__item"><span class="legend__swatch legend__swatch--word"></span>語形・品詞</li>
+              <li class="legend__item"><span class="legend__swatch legend__swatch--syntax"></span>構文・接続</li>
+              <li class="legend__item"><span class="legend__swatch legend__swatch--expression"></span>表現</li>
+              <li class="legend__item"><span class="legend__swatch legend__swatch--spelling"></span>記号・スペル</li>
+            </ul>
+
+            <div class="annotated-text" id="annotated-text" aria-label="エラーをハイライトした英文"></div>
+
+            <section class="selected-issue" id="selected-issue" aria-labelledby="selected-issue-title" hidden>
+              <p class="selected-issue__category" id="selected-issue-category"></p>
+              <h3 class="selected-issue__title" id="selected-issue-title"></h3>
+              <p id="selected-issue-explanation"></p>
+              <p class="selected-issue__fix" id="selected-issue-fix"></p>
+            </section>
+
+            <section class="issue-list-section" id="issue-list-section" aria-labelledby="issue-list-title">
+              <h3 id="issue-list-title">直すポイント</h3>
+              <ol class="issue-list" id="issue-list"></ol>
+            </section>
+
+            <section class="corrected-section" aria-labelledby="corrected-title">
+              <h3 id="corrected-title">修正文</h3>
+              <div class="corrected-text" id="corrected-text"></div>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer class="foot-line">
+      <p>英作文チェック · 入力した英文は結果生成のためだけに送信されます</p>
+    </footer>
+
+    <div class="issue-tooltip" id="issue-tooltip" role="tooltip" hidden>
+      <span class="issue-tooltip__category" id="tooltip-category"></span>
+      <span class="issue-tooltip__body" id="tooltip-body"></span>
+      <span class="issue-tooltip__fix" id="tooltip-fix"></span>
+    </div>
+
+    <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
+      <form class="settings-form" id="settings-form">
+        <h2 id="settings-title">接続設定</h2>
+        <p class="settings-form__note">
+          OpenAI APIキーではなく、管理者が文法チェックサーバーに設定した専用アクセスキーを入力します。値はこのブラウザだけに保存されます。
+        </p>
+        <label class="field-label" for="access-key">文法チェック用アクセスキー</label>
+        <input
+          class="settings-input"
+          id="access-key"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          required
+        />
+        <div class="settings-form__actions">
+          <button class="button button--quiet" id="settings-close" type="button">閉じる</button>
+          <button class="button button--primary" type="submit">設定を保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
