@@ -1,4 +1,4 @@
-const CACHE_NAME = "listening-desk-v49";
+const CACHE_NAME = "listening-desk-v50";
 const APP_SHELL = [
   "./",
   "./index.html",

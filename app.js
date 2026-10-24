@@ -140,9 +140,23 @@ const THEME_LABELS = {
   sage: "セージ",
   night: "ナイト",
 };
-const nativeAudioLibrary = window.Capacitor?.getPlatform?.() === "android"
-  ? window.Capacitor?.Plugins?.AudioLibrary
-  : null;
+function getNativeAudioLibrary() {
+  const capacitor = window.Capacitor;
+  if (capacitor?.getPlatform?.() !== "android") return null;
+  try {
+    // Registering the native plugin explicitly is required on some Android
+    // WebView/Capacitor combinations; relying only on Plugins can leave the
+    // app script unable to finish initializing.
+    if (typeof capacitor.registerPlugin === "function") {
+      return capacitor.registerPlugin("AudioLibrary");
+    }
+  } catch {
+    // Fall back to the legacy global bridge below.
+  }
+  return capacitor?.Plugins?.AudioLibrary || null;
+}
+
+const nativeAudioLibrary = getNativeAudioLibrary();
 const nativeAudioLibrarySupported = Boolean(nativeAudioLibrary);
 
 let tracks = [];
@@ -2923,42 +2937,49 @@ function pushNativeMediaSession(state, track, force = false) {
 function setupNativeMediaSessionActionHandlers() {
   if (!nativeAudioLibrarySupported || nativeMediaListenerInstalled) return;
   nativeMediaListenerInstalled = true;
-  nativeAudioLibrary.addListener("mediaCommand", (event) => {
-    switch (event?.command) {
-      case "play":
-        startPlayback();
-        break;
-      case "pause":
-        pausePlayback();
-        break;
-      case "previous":
-        changeTrackFromMediaControl(-1);
-        break;
-      case "next":
-        changeTrackFromMediaControl(1);
-        break;
-      case "rewind":
-        skipBy(-MEDIA_SEEK_BACKWARD_SECONDS);
-        break;
-      case "forward":
-        skipBy(MEDIA_SEEK_FORWARD_SECONDS);
-        break;
-      case "seekTo":
-        if (Number.isFinite(Number(event.position))) {
-          audio.currentTime = Math.max(0, Number(event.position) / 1000);
-          unlockSentenceBoundary();
-          updateTimeline();
-        }
-        break;
-      case "stop":
-        stopFromMediaControl();
-        break;
-      default:
-        break;
+  try {
+    const listener = nativeAudioLibrary.addListener("mediaCommand", (event) => {
+      switch (event?.command) {
+        case "play":
+          startPlayback();
+          break;
+        case "pause":
+          pausePlayback();
+          break;
+        case "previous":
+          changeTrackFromMediaControl(-1);
+          break;
+        case "next":
+          changeTrackFromMediaControl(1);
+          break;
+        case "rewind":
+          skipBy(-MEDIA_SEEK_BACKWARD_SECONDS);
+          break;
+        case "forward":
+          skipBy(MEDIA_SEEK_FORWARD_SECONDS);
+          break;
+        case "seekTo":
+          if (Number.isFinite(Number(event.position))) {
+            audio.currentTime = Math.max(0, Number(event.position) / 1000);
+            unlockSentenceBoundary();
+            updateTimeline();
+          }
+          break;
+        case "stop":
+          stopFromMediaControl();
+          break;
+        default:
+          break;
+      }
+    });
+    if (listener && typeof listener.catch === "function") {
+      listener.catch(() => {
+        nativeMediaListenerInstalled = false;
+      });
     }
-  }).catch(() => {
+  } catch {
     nativeMediaListenerInstalled = false;
-  });
+  }
 }
 
 function seekFromMediaControl(details, direction) {
