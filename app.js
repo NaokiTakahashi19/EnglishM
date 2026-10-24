@@ -174,6 +174,7 @@ let sentenceCountdownTimer = null;
 let sentencePauseUntil = 0;
 let sentencePauseActive = false;
 let pendingSentenceIndex = -1;
+let sentencePracticeEnabled = false;
 let selectedWord = null;
 let transcriptEditorForcedTrackId = null;
 let openSwipeRow = null;
@@ -1704,7 +1705,12 @@ function cancelSentencePause({ clearPending = true, updateUi = true } = {}) {
 function updateSentencePracticeStatus() {
   const cues = sentenceCues();
   if (cues.length === 0) {
-    practiceStatus.textContent = "英文を生成すると、文末で自動的にポーズします。";
+    practiceStatus.textContent = "英文を選ぶと、その文をリピーティングできます。";
+    delete practiceStatus.dataset.state;
+    return;
+  }
+  if (!sentencePracticeEnabled) {
+    practiceStatus.textContent = "通常再生中です。英文を選ぶと、その文ごとのリピーティングに切り替わります。";
     delete practiceStatus.dataset.state;
     return;
   }
@@ -1730,10 +1736,11 @@ function updateSentencePracticeStatus() {
     : `各文の後に、文の再生時間の${settings.pauseRatio}倍だけ停止します。`;
 }
 
-async function playSentence(index, autoplay = true) {
+async function playSentence(index, autoplay = true, enablePractice = true) {
   const cues = sentenceCues();
   const target = cues[index];
   if (!target) return false;
+  sentencePracticeEnabled = enablePractice;
   cancelPracticePause(false);
   cancelSentencePause({ updateUi: false });
   sentenceBoundaryLock = -1;
@@ -1787,7 +1794,7 @@ function pauseAtSentenceBoundary(index) {
 
 function updateSentencePractice() {
   const cues = sentenceCues();
-  if (cues.length === 0 || sentencePauseActive) return;
+  if (!sentencePracticeEnabled || cues.length === 0 || sentencePauseActive) return;
   if (audio.paused) {
     if (pendingSentenceIndex < 0) updateActiveSentence(sentenceIndexAtTime(audio.currentTime));
     return;
@@ -2695,7 +2702,7 @@ async function startPlayback() {
   if (resumePendingSentence()) return;
   const cues = sentenceCues();
   if (cues.length > 0 && sentenceBoundaryLock === cues.length - 1 && pendingSentenceIndex < 0) {
-    await playSentence(0);
+    await playSentence(0, true, false);
     return;
   }
   if (isPracticePause && pendingPracticeTargetIndex >= 0) {
@@ -2705,6 +2712,7 @@ async function startPlayback() {
     return;
   }
   cancelPracticePause();
+  sentencePracticeEnabled = false;
   if (cues.length > 0) {
     sentenceBoundaryLock = -1;
     sentencePlaybackIndex = sentenceIndexAtTime(audio.currentTime);
@@ -2740,7 +2748,7 @@ function goToPrevious() {
   const cues = sentenceCues();
   if (cues.length > 0) {
     const baseIndex = activeSentenceIndex >= 0 ? activeSentenceIndex : sentenceIndexAtTime(audio.currentTime);
-    playSentence(Math.max(0, baseIndex - 1));
+    playSentence(Math.max(0, baseIndex - 1), true, false);
     return;
   }
   if (audio.currentTime > 3 || currentIndex === 0) {
@@ -2754,7 +2762,7 @@ function goToNext(autoplay = !audio.paused) {
   const cues = sentenceCues();
   if (cues.length > 0) {
     const baseIndex = activeSentenceIndex >= 0 ? activeSentenceIndex : sentenceIndexAtTime(audio.currentTime);
-    playSentence(Math.min(cues.length - 1, baseIndex + 1), true);
+    playSentence(Math.min(cues.length - 1, baseIndex + 1), true, false);
     return;
   }
   if (currentIndex < tracks.length - 1) selectTrack(currentIndex + 1, autoplay);
