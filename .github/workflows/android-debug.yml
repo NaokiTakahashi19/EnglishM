@@ -14,7 +14,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - "capacitor.config.json"
-      - "scripts/build-native-web.mjs"
+      - "scripts/**"
       - ".github/workflows/android-debug.yml"
 
 jobs:
@@ -42,6 +42,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: listening-desk-v50-debug
+          name: listening-desk-v51-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

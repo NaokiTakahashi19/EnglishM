@@ -1442,9 +1442,11 @@ function syncPracticeUi() {
   }
 }
 
-function startAutoNextPause(targetIndex) {
+function startAutoNextPause(
+  targetIndex,
+  playedSeconds = audio.duration / Math.max(audio.playbackRate, 0.1),
+) {
   if (isPracticePause || !tracks[targetIndex]) return;
-  const playedSeconds = audio.duration / Math.max(audio.playbackRate, 0.1);
   const pauseSeconds = Math.max(1, playedSeconds * Number(settings.pauseRatio));
   isPracticePause = true;
   pendingPracticeTargetIndex = targetIndex;
@@ -1784,7 +1786,10 @@ function pauseAtSentenceBoundary(index) {
   updateActiveSentence(index);
   pendingSentenceIndex = index < cues.length - 1 ? index + 1 : -1;
   if (pendingSentenceIndex < 0) {
-    updateSentencePracticeStatus();
+    const playedSeconds = sentencePracticeEnabled
+      ? (cue.end - cue.start) / Math.max(audio.playbackRate, 0.1)
+      : undefined;
+    completeCurrentTrack({ playedSeconds });
     return;
   }
 
@@ -2099,6 +2104,28 @@ function nextTargetAfterEnded() {
   return result.targetIndex;
 }
 
+function completeCurrentTrack({ playedSeconds } = {}) {
+  cancelPracticePause(false);
+  const targetIndex = nextTargetAfterEnded();
+  if (targetIndex < 0) {
+    practiceStatus.dataset.state = "paused";
+    practiceStatus.textContent = "再生リストの最後まで終わりました。";
+    return;
+  }
+
+  if (settings.practiceMode === "manual") {
+    const repeatsSameTrack = targetIndex === currentIndex;
+    activatePracticeTarget(targetIndex, false);
+    practiceStatus.dataset.state = "paused";
+    practiceStatus.textContent = repeatsSameTrack
+      ? `同じ音声を先頭に戻しました。再生ボタンで${completedPlaysForCurrentTrack + 1}回目を再生します。`
+      : "次の音声を選びました。再生ボタンを押すまで待機します。";
+    return;
+  }
+
+  startAutoNextPause(targetIndex, playedSeconds);
+}
+
 async function activatePracticeTarget(targetIndex, autoplay) {
   if (!tracks[targetIndex]) return;
   if (targetIndex !== currentIndex) {
@@ -2107,6 +2134,10 @@ async function activatePracticeTarget(targetIndex, autoplay) {
   }
 
   audio.currentTime = 0;
+  sentenceBoundaryLock = -1;
+  sentencePlaybackIndex = hasSentenceCues() ? 0 : -1;
+  pendingSentenceIndex = -1;
+  if (hasSentenceCues()) updateActiveSentence(0);
   const track = currentTrack();
   if (track) {
     positions[track.id] = 0;
@@ -3401,21 +3432,7 @@ audio.addEventListener("ended", () => {
     pauseAtSentenceBoundary(cues.length - 1);
     return;
   }
-  cancelPracticePause(false);
-  const targetIndex = nextTargetAfterEnded();
-  if (targetIndex < 0) {
-    practiceStatus.dataset.state = "paused";
-    practiceStatus.textContent = "再生リストの最後まで終わりました。";
-  } else if (settings.practiceMode === "manual") {
-    const repeatsSameTrack = targetIndex === currentIndex;
-    activatePracticeTarget(targetIndex, false);
-    practiceStatus.dataset.state = "paused";
-    practiceStatus.textContent = repeatsSameTrack
-      ? "同じ音声を先頭に戻しました。再生ボタンを押すまで待機します。"
-      : "次の音声を選びました。再生ボタンを押すまで待機します。";
-  } else {
-    startAutoNextPause(targetIndex);
-  }
+  completeCurrentTrack();
 });
 
 audio.addEventListener("error", () => {
