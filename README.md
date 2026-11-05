@@ -12,7 +12,7 @@ python3 -m http.server 4173
 
 ブラウザで `http://localhost:4173` を開いてください。
 
-## Androidアプリ（v51）
+## Androidアプリ（v52）
 
 Android版は既存のPWA画面をCapacitorで端末アプリ化し、AndroidのStorage Access Frameworkで選択したファイル／フォルダの読み取り権限を保持します。初回だけ音声またはフォルダを選ぶと、再生リストと現在の音声をAndroid側へ保存し、2回目以降は起動時に自動復元します。「音声に再接続」を毎回押す必要はありません。
 
@@ -28,7 +28,7 @@ Android版には次も含まれます。
 
 ### デバッグAPKの作成
 
-Capacitor 8のAndroidプロジェクトは `android/` にあります。GitHubの「Actions」→「Android debug APK」→「Run workflow」でビルドすると、成果物 `listening-desk-v51-debug` から `app-debug.apk` を取得できます。ワークフローはNode.js 24、Java 21、Android API 36でビルドします。
+Capacitor 8のAndroidプロジェクトは `android/` にあります。GitHubの「Actions」→「Android debug APK」→「Run workflow」でビルドすると、成果物 `listening-desk-v52-debug` から `app-debug.apk` を取得できます。ワークフローはNode.js 24、Java 21、Android API 36でビルドします。
 
 ローカルで作成する場合は、Capacitor 8に対応したAndroid Studio 2025.2.1以降とAndroid SDKを用意し、次を実行します。
 
@@ -42,10 +42,10 @@ APKは `android/app/build/outputs/apk/debug/app-debug.apk` に生成されます
 ## 学習機能
 
 - 20秒〜2分程度の長い音声を、認識した英文1文ごとの開始・終了時刻に分割
-- 1文の再生が終わるたびに自動停止するリピーティング
+- 「リピーティング設定」で切り替えられる、文末ごとの停止／連続再生
 - 直前の文の実再生時間を基準に0.7〜1.5倍待って自動再開、または∞（再生ボタンまで停止）
-- 現在の英文と文ごとの日本語訳を常時表示
-- 「現在の1文」と、再生中の文を中央へ追従する「スクロール全文」の2表示
+- 再生中の英文を単語ハイライト付きで1か所だけに表示し、同じ文の重複表示を抑えた省スペース表示
+- 「現在の1文」と、再生中の文を中央へ追従する「スクロール全文」の2表示（リピーティング設定から変更）
 - 英文を選ぶと、その文の先頭から再生
 - 複数ファイル選択・フォルダ選択に対応した再生リスト
 - 対応ブラウザで、音声をコピーせずファイル参照と再生リストを保存し、次回起動時に自動復元

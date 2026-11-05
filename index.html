@@ -26,7 +26,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=51" />
+    <link rel="stylesheet" href="./styles.css?v=52" />
     <title>Listening Desk — 文ごとにリピーティング</title>
   </head>
   <body>
@@ -167,7 +167,7 @@
               id="practice-settings-button"
               type="button"
               aria-haspopup="dialog"
-              aria-label="自動ポーズを変更"
+              aria-label="リピーティング設定を変更"
             >
               <svg class="icon setting-chip__icon" viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="12" cy="12" r="8" />
@@ -265,11 +265,25 @@
           <dialog class="word-dialog settings-dialog" id="practice-settings-dialog" aria-labelledby="practice-settings-title" tabindex="-1">
             <div class="word-dialog__inner">
               <p class="word-dialog__label">リピーティング設定</p>
-              <h3 id="practice-settings-title">自動ポーズ</h3>
-              <p class="settings-dialog__note">英文1文の再生時間を基準に、声に出して繰り返す時間を決めます。∞では再生ボタンを押すまで止まります。</p>
+              <h3 id="practice-settings-title">リピーティング</h3>
+              <p class="settings-dialog__note">文ごとの練習、英文の表示方法、再生後の待ち時間をまとめて設定します。</p>
               <div class="practice-settings">
                 <div class="field-group">
-                  <label for="pause-ratio">文の後のポーズ</label>
+                  <label for="sentence-practice-mode">文ごとの練習</label>
+                  <select id="sentence-practice-mode" class="field-control">
+                    <option value="continuous">OFF（続けて再生）</option>
+                    <option value="sentence">ON（文末で停止）</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label for="sentence-display-mode">英文の表示</label>
+                  <select id="sentence-display-mode" class="field-control">
+                    <option value="focus">現在の1文のみ</option>
+                    <option value="scroll">全文リスト</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label for="pause-ratio">再生後のポーズ</label>
                   <select id="pause-ratio" class="field-control">
                     <option value="manual">∞（再生ボタンまで停止）</option>
                     <option value="0.7">再生時間の0.7倍</option>
@@ -284,6 +298,7 @@
                   </select>
                 </div>
               </div>
+              <p class="sentence-practice-status" id="practice-status" aria-live="polite">文ごとのリピートはOFFです。</p>
               <div class="word-dialog__actions">
                 <button class="control control--primary" id="practice-settings-close" type="button">閉じる</button>
               </div>
@@ -358,7 +373,7 @@
               <section class="sync-script" id="sync-script" aria-labelledby="sync-script-title" hidden data-view="focus">
                 <div class="sync-script__heading">
                   <div class="sync-script__title-row">
-                    <h4 id="sync-script-title">文ごとにリピーティング</h4>
+                    <h4 id="sync-script-title">再生中の英文</h4>
                     <button
                       class="control control--text sync-translation-button"
                       id="current-translation-button"
@@ -369,27 +384,11 @@
                       日本語訳を見る
                     </button>
                   </div>
-                  <div class="sentence-view-control">
-                    <label for="sentence-display-mode">英文の表示</label>
-                    <select id="sentence-display-mode" class="field-control">
-                      <option value="focus">現在の1文</option>
-                      <option value="scroll">スクロール全文</option>
-                    </select>
-                  </div>
-                  <p>英文を選ぶと、その文の先頭から再生します。</p>
                 </div>
-                <article class="current-sentence" id="current-sentence" aria-live="polite">
-                  <p class="current-sentence__position" id="current-sentence-position">— / —</p>
-                  <p class="current-sentence__english" id="current-sentence-english">英文を生成すると、現在の1文がここに表示されます。</p>
-                  <p class="current-sentence__translation" id="current-sentence-translation">和訳も文ごとに表示されます。</p>
-                </article>
-                <p class="sentence-practice-status" id="practice-status" aria-live="polite">英文を選ぶと、その文をリピーティングできます。</p>
+                <p class="current-sentence__position" id="current-sentence-position">— / —</p>
+                <div class="sync-transcript" id="sync-transcript" aria-label="単語を選択できる再生中の英文"></div>
+                <p class="current-sentence__translation" id="current-sentence-translation"></p>
                 <ol class="sentence-list" id="sentence-list" aria-label="英文と和訳の一覧"></ol>
-                <details class="word-timing-details">
-                  <summary>単語単位で確認</summary>
-                  <div class="sync-transcript" id="sync-transcript" aria-label="単語を選択できる英語スクリプト"></div>
-                </details>
-                <p class="sync-script__note">文と単語の位置は音声認識による推定値のため、無音部分では多少ずれることがあります。</p>
               </section>
             </div>
 
@@ -648,6 +647,6 @@
 
     <div class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./app.js?v=51"></script>
+    <script type="module" src="./app.js?v=52"></script>
   </body>
 </html>

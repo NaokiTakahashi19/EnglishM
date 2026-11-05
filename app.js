@@ -33,6 +33,7 @@ const playbackSettingsButton = document.querySelector("#playback-settings-button
 const playbackSettingsDialog = document.querySelector("#playback-settings-dialog");
 const playbackSettingsClose = document.querySelector("#playback-settings-close");
 const pauseRatioSelect = document.querySelector("#pause-ratio");
+const sentencePracticeModeSelect = document.querySelector("#sentence-practice-mode");
 const practiceStatus = document.querySelector("#practice-status");
 const practiceSettingsStatus = document.querySelector("#practice-settings-status");
 const practiceSettingsButton = document.querySelector("#practice-settings-button");
@@ -61,10 +62,9 @@ const transcriptStatus = document.querySelector("#transcript-status");
 const syncScript = document.querySelector("#sync-script");
 const syncTranscript = document.querySelector("#sync-transcript");
 const sentenceDisplayModeSelect = document.querySelector("#sentence-display-mode");
-const currentSentencePosition = document.querySelector("#current-sentence-position");
-const currentSentenceEnglish = document.querySelector("#current-sentence-english");
-const currentSentenceTranslation = document.querySelector("#current-sentence-translation");
 const sentenceList = document.querySelector("#sentence-list");
+const currentSentencePosition = document.querySelector("#current-sentence-position");
+const currentSentenceTranslation = document.querySelector("#current-sentence-translation");
 const currentTranslationButton = document.querySelector("#current-translation-button");
 const currentTranslationDialog = document.querySelector("#current-translation-dialog");
 const currentTranslationOutput = document.querySelector("#current-translation-output");
@@ -207,6 +207,7 @@ const settings = {
   repeatCount: 3,
   practiceMode: "manual",
   pauseRatio: 1.2,
+  sentencePracticeEnabled: false,
   transcriptVisible: true,
   transcriptShowFrom: 1,
   sentenceDisplayMode: "focus",
@@ -221,6 +222,7 @@ settings.transcriptShowFrom = Math.min(99, Math.max(1, Math.round(Number(setting
 const supportedPauseRatios = [0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5];
 settings.pauseRatio = supportedPauseRatios.includes(Number(settings.pauseRatio)) ? Number(settings.pauseRatio) : 1.2;
 settings.practiceMode = settings.practiceMode === "auto" ? "auto" : "manual";
+settings.sentencePracticeEnabled = settings.sentencePracticeEnabled === true;
 settings.sentenceDisplayMode = settings.sentenceDisplayMode === "scroll" ? "scroll" : "focus";
 settings.theme = Object.hasOwn(THEME_LABELS, settings.theme) ? settings.theme : "warm";
 delete settings.repeatOne;
@@ -231,7 +233,9 @@ rateSelect.value = String(settings.rate);
 playbackModeSelect.value = settings.playbackMode;
 repeatCountInput.value = String(settings.repeatCount);
 pauseRatioSelect.value = settings.practiceMode === "manual" ? "manual" : String(settings.pauseRatio);
+sentencePracticeModeSelect.value = settings.sentencePracticeEnabled ? "sentence" : "continuous";
 sentenceDisplayModeSelect.value = settings.sentenceDisplayMode;
+sentencePracticeEnabled = settings.sentencePracticeEnabled;
 audio.playbackRate = settings.rate;
 applyTheme(settings.theme, { persist: false });
 syncConnectionState();
@@ -1410,7 +1414,9 @@ function syncPlaybackSettingsUi() {
 function syncPracticeUi() {
   const mode = settings.practiceMode;
   pauseRatioSelect.value = mode === "manual" ? "manual" : String(settings.pauseRatio);
-  practiceSettingsStatus.textContent = mode === "auto" ? `${settings.pauseRatio}×` : "∞";
+  sentencePracticeModeSelect.value = sentencePracticeEnabled ? "sentence" : "continuous";
+  const pauseLabel = mode === "auto" ? `${settings.pauseRatio}×` : "∞";
+  practiceSettingsStatus.textContent = `${pauseLabel}・文${sentencePracticeEnabled ? "ON" : "OFF"}`;
 
   if (hasSentenceCues()) {
     updateSentencePracticeStatus();
@@ -1648,24 +1654,37 @@ function updateActiveSentence(index, { scroll = true } = {}) {
   if (cues.length === 0) {
     activeSentenceIndex = -1;
     currentSentencePosition.textContent = "— / —";
-    currentSentenceEnglish.textContent = "英文を生成すると、現在の1文がここに表示されます。";
-    currentSentenceTranslation.textContent = "和訳も文ごとに表示されます。";
+    currentSentenceTranslation.textContent = "";
+    currentSentenceTranslation.hidden = true;
+    syncFocusedWordVisibility();
     return;
   }
 
   if (activeSentenceIndex >= 0) {
-    sentenceButtons[activeSentenceIndex]?.removeAttribute("data-active");
-    sentenceButtons[activeSentenceIndex]?.removeAttribute("aria-current");
+    const previousButton = sentenceButtons[activeSentenceIndex];
+    previousButton?.removeAttribute("data-active");
+    previousButton?.removeAttribute("aria-current");
+    previousButton?.closest("li")?.removeAttribute("data-active");
   }
   activeSentenceIndex = nextIndex;
   const cue = cues[nextIndex];
   const button = sentenceButtons[nextIndex];
   button?.setAttribute("data-active", "true");
   button?.setAttribute("aria-current", "true");
+  button?.closest("li")?.setAttribute("data-active", "true");
   currentSentencePosition.textContent = `${nextIndex + 1} / ${cues.length} · ${formatTime(cue.start)}`;
-  currentSentenceEnglish.textContent = cue.text;
-  currentSentenceTranslation.textContent = cue.translation || "和訳を生成しています。";
+  currentSentenceTranslation.textContent = cue.translation || "";
+  currentSentenceTranslation.hidden = !cue.translation;
+  syncFocusedWordVisibility();
   if (scroll) keepActiveSentenceVisible(button);
+}
+
+function syncFocusedWordVisibility() {
+  const focusCurrentSentence = settings.sentenceDisplayMode === "focus" && activeSentenceIndex >= 0;
+  syncWordButtons.forEach((button) => {
+    button.hidden = focusCurrentSentence
+      && Number(button.dataset.sentenceIndex) !== activeSentenceIndex;
+  });
 }
 
 function renderSentencePractice(record = activeTranscriptRecord) {
@@ -1721,12 +1740,12 @@ function cancelSentencePause({ clearPending = true, updateUi = true } = {}) {
 function updateSentencePracticeStatus() {
   const cues = sentenceCues();
   if (cues.length === 0) {
-    practiceStatus.textContent = "英文を選ぶと、その文をリピーティングできます。";
+    practiceStatus.textContent = "英文がある音声で文ごとのリピートを利用できます。";
     delete practiceStatus.dataset.state;
     return;
   }
   if (!sentencePracticeEnabled) {
-    practiceStatus.textContent = "通常再生中です。英文を選ぶと、その文ごとのリピーティングに切り替わります。";
+    practiceStatus.textContent = "文ごとのリピートはOFFです。音声は続けて再生されます。";
     delete practiceStatus.dataset.state;
     return;
   }
@@ -1752,11 +1771,10 @@ function updateSentencePracticeStatus() {
     : `各文の後に、文の再生時間の${settings.pauseRatio}倍だけ停止します。`;
 }
 
-async function playSentence(index, autoplay = true, enablePractice = true) {
+async function playSentence(index, autoplay = true) {
   const cues = sentenceCues();
   const target = cues[index];
   if (!target) return false;
-  sentencePracticeEnabled = enablePractice;
   cancelPracticePause(false);
   cancelSentencePause({ updateUi: false });
   sentenceBoundaryLock = -1;
@@ -1813,9 +1831,12 @@ function pauseAtSentenceBoundary(index) {
 
 function updateSentencePractice() {
   const cues = sentenceCues();
-  if (!sentencePracticeEnabled || cues.length === 0 || sentencePauseActive) return;
+  if (cues.length === 0) return;
+  const currentSentenceIndex = sentenceIndexAtTime(audio.currentTime);
+  if (currentSentenceIndex !== activeSentenceIndex) updateActiveSentence(currentSentenceIndex);
+  if (!sentencePracticeEnabled || sentencePauseActive) return;
   if (audio.paused) {
-    if (pendingSentenceIndex < 0) updateActiveSentence(sentenceIndexAtTime(audio.currentTime));
+    if (pendingSentenceIndex < 0) updateActiveSentence(currentSentenceIndex);
     return;
   }
   if (currentLoop().enabled && validLoop(currentLoop())) return;
@@ -1860,6 +1881,7 @@ function renderSynchronizedTranscript(words) {
   syncTranscript.replaceChildren();
   syncWordButtons = [];
   activeSyncWordIndex = -1;
+  syncScript.dataset.hasWords = String(normalizedWords.length > 0);
   if (normalizedWords.length === 0) {
     renderSentencePractice();
     renderCurrentTranslation();
@@ -1873,6 +1895,7 @@ function renderSynchronizedTranscript(words) {
     button.textContent = word.text;
     button.dataset.start = String(word.start);
     button.dataset.index = String(index);
+    button.dataset.sentenceIndex = String(sentenceIndexAtTime(word.start));
     if (Number.isFinite(word.end)) button.dataset.end = String(word.end);
     button.dataset.baseAriaLabel = `${word.text}、${formatTime(word.start)}から`;
     button.setAttribute("aria-label", button.dataset.baseAriaLabel);
@@ -1881,6 +1904,7 @@ function renderSynchronizedTranscript(words) {
     syncTranscript.append(button);
   });
   renderSentencePractice();
+  syncFocusedWordVisibility();
   renderCurrentTranslation();
   syncWordLoopRange();
   updateTranscriptHighlight();
@@ -2747,7 +2771,7 @@ async function startPlayback() {
   if (resumePendingSentence()) return;
   const cues = sentenceCues();
   if (cues.length > 0 && sentenceBoundaryLock === cues.length - 1 && pendingSentenceIndex < 0) {
-    await playSentence(0, true, false);
+    await playSentence(0);
     return;
   }
   if (isPracticePause && pendingPracticeTargetIndex >= 0) {
@@ -2757,7 +2781,6 @@ async function startPlayback() {
     return;
   }
   cancelPracticePause();
-  sentencePracticeEnabled = false;
   if (cues.length > 0) {
     sentenceBoundaryLock = -1;
     sentencePlaybackIndex = sentenceIndexAtTime(audio.currentTime);
@@ -2793,7 +2816,7 @@ function goToPrevious() {
   const cues = sentenceCues();
   if (cues.length > 0) {
     const baseIndex = activeSentenceIndex >= 0 ? activeSentenceIndex : sentenceIndexAtTime(audio.currentTime);
-    playSentence(Math.max(0, baseIndex - 1), true, false);
+    playSentence(Math.max(0, baseIndex - 1));
     return;
   }
   if (audio.currentTime > 3 || currentIndex === 0) {
@@ -2807,7 +2830,7 @@ function goToNext(autoplay = !audio.paused) {
   const cues = sentenceCues();
   if (cues.length > 0) {
     const baseIndex = activeSentenceIndex >= 0 ? activeSentenceIndex : sentenceIndexAtTime(audio.currentTime);
-    playSentence(Math.min(cues.length - 1, baseIndex + 1), true, false);
+    playSentence(Math.min(cues.length - 1, baseIndex + 1));
     return;
   }
   if (currentIndex < tracks.length - 1) selectTrack(currentIndex + 1, autoplay);
@@ -3146,7 +3169,7 @@ setBButton.addEventListener("click", () => setLoopPoint("b"));
 clearLoopButton.addEventListener("click", clearLoop);
 loopToggleButton.addEventListener("click", toggleLoop);
 practiceSettingsButton.addEventListener("click", () => {
-  openSettingsDialog(practiceSettingsDialog, pauseRatioSelect);
+  openSettingsDialog(practiceSettingsDialog, sentencePracticeModeSelect);
 });
 playbackRateSettingsButton.addEventListener("click", () => openSettingsDialog(playbackRateDialog, rateSelect));
 playbackSettingsButton.addEventListener("click", () => openSettingsDialog(playbackSettingsDialog, playbackModeSelect));
@@ -3174,10 +3197,23 @@ pauseRatioSelect.addEventListener("change", () => {
   syncPracticeUi();
 });
 
+sentencePracticeModeSelect.addEventListener("change", () => {
+  sentencePracticeEnabled = sentencePracticeModeSelect.value === "sentence";
+  settings.sentencePracticeEnabled = sentencePracticeEnabled;
+  if (!sentencePracticeEnabled) {
+    cancelSentencePause({ updateUi: false });
+    sentenceBoundaryLock = -1;
+    sentencePlaybackIndex = hasSentenceCues() ? sentenceIndexAtTime(audio.currentTime) : -1;
+  }
+  writeStored(SETTINGS_KEY, settings);
+  syncPracticeUi();
+});
+
 sentenceDisplayModeSelect.addEventListener("change", () => {
   settings.sentenceDisplayMode = sentenceDisplayModeSelect.value === "scroll" ? "scroll" : "focus";
   writeStored(SETTINGS_KEY, settings);
   syncScript.dataset.view = settings.sentenceDisplayMode;
+  syncFocusedWordVisibility();
   updateActiveSentence(activeSentenceIndex >= 0 ? activeSentenceIndex : 0);
 });
 
