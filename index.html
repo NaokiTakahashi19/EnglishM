@@ -26,14 +26,17 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=53" />
-    <title>Listening Desk — 文ごとにリピーティング</title>
+    <link rel="stylesheet" href="./styles.css?v=54" />
+    <title>Listening Desk v54 — 文ごとにリピーティング</title>
   </head>
   <body>
     <header class="nav-edge" aria-label="アプリヘッダー">
-      <a class="wordmark" href="#app" aria-label="Listening Deskの先頭へ">
+      <a class="wordmark" href="#app" aria-label="Listening Desk v54の先頭へ">
         <span class="wordmark__mark" aria-hidden="true">LD</span>
-        <span class="wordmark__name">Listening Desk</span>
+        <span class="wordmark__title">
+          <span class="wordmark__name">Listening Desk</span>
+          <span class="wordmark__version">v54</span>
+        </span>
       </a>
       <div class="nav-edge__actions">
         <button
@@ -95,7 +98,7 @@
     </dialog>
 
     <main id="app" class="app-shell">
-      <h1 class="visually-hidden" id="page-title">Listening Desk</h1>
+      <h1 class="visually-hidden" id="page-title">Listening Desk v54</h1>
 
       <section class="workbench reveal" style="--i: 0" aria-label="音声プレイヤー">
         <div class="player-pane">
@@ -610,7 +613,6 @@
     </main>
 
     <footer class="foot-mast">
-      <p class="foot-mast__wordmark">Listening Desk</p>
       <button class="control control--text foot-mast__info" id="app-info-button" type="button" aria-haspopup="dialog">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="8" />
@@ -647,6 +649,6 @@
 
     <div class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./app.js?v=53"></script>
+    <script type="module" src="./app.js?v=54"></script>
   </body>
 </html>
