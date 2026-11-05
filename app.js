@@ -1521,6 +1521,30 @@ function isSentenceEnding(text) {
   return /[.!?](?:["'”’\])}]+)?$/.test(String(text || "").trim());
 }
 
+const SENTENCE_CUE_VERSION = 2;
+const LIKELY_SENTENCE_STARTS = new Set([
+  "can", "could", "did", "do", "does", "had", "has", "have", "he", "her", "here",
+  "how", "i", "is", "it", "let's", "may", "please", "she", "should", "that", "the",
+  "there", "these", "they", "this", "those", "was", "we", "were", "what", "what's",
+  "when", "where", "which", "who", "why", "will", "would", "you",
+]);
+
+function likelySentenceStart(text) {
+  const token = String(text || "")
+    .trim()
+    .replace(/^[^A-Za-z]+/, "")
+    .replace(/[^A-Za-z']+$/, "");
+  if (!token || token[0] !== token[0].toUpperCase()) return false;
+  return LIKELY_SENTENCE_STARTS.has(token.toLocaleLowerCase("en"));
+}
+
+function isSegmentBoundary(time, segments) {
+  if (!Number.isFinite(time)) return false;
+  return segments.some((segment) => (
+    Number.isFinite(segment.end) && Math.abs(segment.end - time) <= 0.18
+  ));
+}
+
 function normalizeSentenceCues(sentences) {
   if (!Array.isArray(sentences)) return [];
   return sentences
@@ -1571,8 +1595,23 @@ function buildSentenceCues(words, segments, transcriptText = "", fallbackDuratio
       currentEnd = Number.isFinite(word.end)
         ? word.end
         : (normalizedWords[index + 1]?.start || word.start + 0.4);
+      const nextWord = normalizedWords[index + 1];
       const cueDuration = currentEnd - currentStart;
-      if (isSentenceEnding(word.text) || cueDuration >= 20) flush();
+      const pauseAfterWord = nextWord ? Math.max(0, nextWord.start - currentEnd) : 0;
+      const hasEnoughPhrase = currentTokens.length >= 2 && cueDuration >= 1.2;
+      const naturalSegmentBoundary = hasEnoughPhrase
+        && cueDuration >= 3.5
+        && isSegmentBoundary(currentEnd, normalizedSegments);
+      const nextStartsSentence = hasEnoughPhrase && likelySentenceStart(nextWord?.text);
+      const audiblePause = hasEnoughPhrase && pauseAfterWord >= 0.55;
+      const forcedReadableLength = currentTokens.length >= 8 && cueDuration >= 10;
+      if (
+        isSentenceEnding(word.text)
+        || nextStartsSentence
+        || audiblePause
+        || naturalSegmentBoundary
+        || forcedReadableLength
+      ) flush();
     });
     flush();
   } else if (normalizedSegments.length > 0) {
@@ -1608,13 +1647,17 @@ function buildSentenceCues(words, segments, transcriptText = "", fallbackDuratio
 function normalizeTranscriptRecord(record) {
   if (!record?.text) return record;
   const existingSentences = normalizeSentenceCues(record.sentences);
+  const rebuiltSentences = buildSentenceCues(record.words, record.segments, record.text, audio.duration);
+  const shouldUpgradeSentenceCues = Number(record.sentenceCueVersion || 0) < SENTENCE_CUE_VERSION
+    && rebuiltSentences.length > existingSentences.length;
   return {
     ...record,
     words: normalizeTimedWords(record.words),
     segments: normalizeTimedSegments(record.segments),
-    sentences: existingSentences.length > 0
+    sentences: existingSentences.length > 0 && !shouldUpgradeSentenceCues
       ? existingSentences
-      : buildSentenceCues(record.words, record.segments, record.text, audio.duration),
+      : rebuiltSentences,
+    sentenceCueVersion: SENTENCE_CUE_VERSION,
   };
 }
 
@@ -2216,6 +2259,16 @@ async function loadTranscript(track) {
     if (currentTrack()?.id !== track.id) return;
     if (record?.text) {
       activeTranscriptRecord = normalizeTranscriptRecord(record);
+      const sentenceCuesUpgraded = Number(record.sentenceCueVersion || 0) < SENTENCE_CUE_VERSION
+        && normalizeSentenceCues(activeTranscriptRecord.sentences).length
+          > normalizeSentenceCues(record.sentences).length;
+      if (sentenceCuesUpgraded) {
+        try {
+          await putStoredTranscript(activeTranscriptRecord);
+        } catch (error) {
+          console.warn("Updated sentence cues could not be saved:", error);
+        }
+      }
       transcriptOutput.value = activeTranscriptRecord.text;
       transcriptOutput.dataset.state = "success";
       saveTranscriptButton.disabled = false;
@@ -2332,6 +2385,7 @@ async function startTranscription() {
       words,
       segments,
       sentences: buildSentenceCues(words, segments, text, audio.duration),
+      sentenceCueVersion: SENTENCE_CUE_VERSION,
       translation: "",
       wordTranslations: {},
       source: payload.source || "openai-whisper-1",
@@ -2484,7 +2538,8 @@ async function requestOpenAITranslation({ purpose, id, key = "", text, sentences
     const existing = await getStoredTranscript(id);
     if (!existing?.text) return;
     const storedSentences = normalizeSentenceCues(existing.sentences);
-    const sentenceSource = storedSentences.length > 0 ? storedSentences : normalizeSentenceCues(sentences);
+    const requestedSentences = normalizeSentenceCues(sentences);
+    const sentenceSource = requestedSentences.length > 0 ? requestedSentences : storedSentences;
     const updatedRecord = purpose === "word"
       ? {
           ...existing,
@@ -2500,6 +2555,7 @@ async function requestOpenAITranslation({ purpose, id, key = "", text, sentences
               ...sentence,
               translation: translations[index] || sentence.translation || "",
             })),
+            sentenceCueVersion: SENTENCE_CUE_VERSION,
             translation,
             translatedAt: new Date().toISOString(),
           }
@@ -2590,6 +2646,7 @@ async function saveTranscript() {
     sentences: textChanged
       ? buildSentenceCues([], [], text, audio.duration)
       : (activeTranscriptRecord?.sentences || []),
+    sentenceCueVersion: SENTENCE_CUE_VERSION,
     translation: textChanged ? "" : (activeTranscriptRecord?.translation || ""),
     wordTranslations: textChanged ? {} : (activeTranscriptRecord?.wordTranslations || {}),
     source: "edited",

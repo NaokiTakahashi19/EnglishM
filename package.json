@@ -1,10 +1,10 @@
 {
   "name": "listening-desk",
-  "version": "52.0.0",
+  "version": "53.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node scripts/test-playback-count.mjs",
+    "test": "node scripts/test-playback-count.mjs && node scripts/test-sentence-cues.mjs",
     "build:native-web": "node scripts/build-native-web.mjs",
     "cap:sync": "npm run build:native-web && cap sync android",
     "android:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
