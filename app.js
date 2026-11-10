@@ -60,17 +60,12 @@ const saveTranscriptButton = document.querySelector("#save-transcript-button");
 const deleteTranscriptButton = document.querySelector("#delete-transcript-button");
 const transcriptStatus = document.querySelector("#transcript-status");
 const syncScript = document.querySelector("#sync-script");
+const syncScriptScroll = document.querySelector(".sync-script__scroll");
 const syncTranscript = document.querySelector("#sync-transcript");
 const sentenceDisplayModeSelect = document.querySelector("#sentence-display-mode");
 const sentenceList = document.querySelector("#sentence-list");
 const currentSentencePosition = document.querySelector("#current-sentence-position");
 const currentSentenceTranslation = document.querySelector("#current-sentence-translation");
-const currentTranslationButton = document.querySelector("#current-translation-button");
-const currentTranslationDialog = document.querySelector("#current-translation-dialog");
-const currentTranslationOutput = document.querySelector("#current-translation-output");
-const currentTranslationStatus = document.querySelector("#current-translation-status");
-const currentTranslationGenerate = document.querySelector("#current-translation-generate");
-const currentTranslationClose = document.querySelector("#current-translation-close");
 const translationPanel = document.querySelector("#translation-panel");
 const translationOutput = document.querySelector("#translation-output");
 const translationStatus = document.querySelector("#translation-status");
@@ -1073,7 +1068,6 @@ function readTrackDuration(track) {
 function selectTrack(index, autoplay = false) {
   if (!tracks[index]) return;
   if (wordDialog.open) wordDialog.close();
-  if (currentTranslationDialog.open) currentTranslationDialog.close();
   cancelPracticePause(false);
   resetSentencePractice();
   saveCurrentPosition();
@@ -1128,7 +1122,6 @@ function removeTrack(index) {
 
 function resetPlayer() {
   if (wordDialog.open) wordDialog.close();
-  if (currentTranslationDialog.open) currentTranslationDialog.close();
   cancelPracticePause(false);
   seek.value = "0";
   seek.max = "0";
@@ -1680,13 +1673,13 @@ function sentenceIndexAtTime(time) {
 }
 
 function keepActiveSentenceVisible(button) {
-  if (!button || settings.sentenceDisplayMode !== "scroll" || sentenceList.clientHeight === 0) return;
-  const listRect = sentenceList.getBoundingClientRect();
+  if (!button || settings.sentenceDisplayMode !== "scroll" || syncScriptScroll.clientHeight === 0) return;
+  const listRect = syncScriptScroll.getBoundingClientRect();
   const buttonRect = button.getBoundingClientRect();
   const inset = 16;
   if (buttonRect.top >= listRect.top + inset && buttonRect.bottom <= listRect.bottom - inset) return;
-  sentenceList.scrollBy({
-    top: buttonRect.top - listRect.top - (sentenceList.clientHeight - buttonRect.height) / 2,
+  syncScriptScroll.scrollBy({
+    top: buttonRect.top - listRect.top - (syncScriptScroll.clientHeight - buttonRect.height) / 2,
     behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
   });
 }
@@ -1703,6 +1696,7 @@ function updateActiveSentence(index, { scroll = true } = {}) {
     return;
   }
 
+  const sentenceChanged = activeSentenceIndex !== nextIndex;
   if (activeSentenceIndex >= 0) {
     const previousButton = sentenceButtons[activeSentenceIndex];
     previousButton?.removeAttribute("data-active");
@@ -1719,6 +1713,7 @@ function updateActiveSentence(index, { scroll = true } = {}) {
   currentSentenceTranslation.textContent = cue.translation || "";
   currentSentenceTranslation.hidden = !cue.translation;
   syncFocusedWordVisibility();
+  if (sentenceChanged && settings.sentenceDisplayMode === "focus") syncScriptScroll.scrollTop = 0;
   if (scroll) keepActiveSentenceVisible(button);
 }
 
@@ -1927,7 +1922,6 @@ function renderSynchronizedTranscript(words) {
   syncScript.dataset.hasWords = String(normalizedWords.length > 0);
   if (normalizedWords.length === 0) {
     renderSentencePractice();
-    renderCurrentTranslation();
     return;
   }
 
@@ -1948,7 +1942,6 @@ function renderSynchronizedTranscript(words) {
   });
   renderSentencePractice();
   syncFocusedWordVisibility();
-  renderCurrentTranslation();
   syncWordLoopRange();
   updateTranscriptHighlight();
 }
@@ -1970,38 +1963,6 @@ function renderTranslation(text) {
       ? "日本語訳はOpenAI APIで生成します。"
       : "";
     delete translationStatus.dataset.state;
-  }
-  renderCurrentTranslation(translation);
-}
-
-function renderCurrentTranslation(text = activeTranscriptRecord?.translation || "") {
-  const hasTranscript = Boolean(activeTranscriptRecord?.text);
-  const translation = String(text || "").trim();
-  const isTranslating = hasTranscript && translatingTrackId === activeTranscriptRecord?.id;
-
-  currentTranslationButton.disabled = !hasTranscript;
-  currentTranslationButton.textContent = translation
-    ? "日本語訳を見る"
-    : (isTranslating ? "日本語訳を生成中" : "日本語訳を生成");
-  currentTranslationOutput.textContent = translation || "まだ日本語訳はありません。";
-  currentTranslationGenerate.hidden = Boolean(translation);
-  currentTranslationGenerate.disabled = !hasTranscript || isTranslating;
-
-  delete currentTranslationStatus.dataset.state;
-  if (translation) {
-    currentTranslationStatus.textContent = "この音声に保存されている日本語訳です。";
-  } else if (isTranslating) {
-    currentTranslationStatus.dataset.state = "loading";
-    currentTranslationStatus.textContent = "OpenAI APIで日本語訳を生成しています。";
-  } else if (translationStatus.dataset.state === "error" && translationStatus.textContent) {
-    currentTranslationStatus.dataset.state = "error";
-    currentTranslationStatus.textContent = translationStatus.textContent;
-  } else if (hasTranscript && !getTranslationAccessKey()) {
-    currentTranslationStatus.textContent = "生成するには、共通API設定が必要です。";
-  } else {
-    currentTranslationStatus.textContent = hasTranscript
-      ? "生成すると、このブラウザに保存されます。"
-      : "先に英語スクリプトを生成してください。";
   }
 }
 
@@ -2483,7 +2444,6 @@ function startTranslation(record, force = false) {
     translateButton.disabled = true;
     translationStatus.dataset.state = "loading";
     translationStatus.textContent = "OpenAI APIで日本語訳を生成しています。";
-    renderCurrentTranslation();
   }
   const sentences = normalizeSentenceCues(record.sentences);
   requestOpenAITranslation({
@@ -2593,7 +2553,6 @@ async function requestOpenAITranslation({ purpose, id, key = "", text, sentences
       renderLibrary();
       if (currentTrack()?.id === id) {
         translateButton.disabled = false;
-        renderCurrentTranslation();
       }
     }
   }
@@ -3188,7 +3147,10 @@ chooseFolderButton.addEventListener("click", () => {
   requestFolderSelection("all");
 });
 closeSettingsOnBackdrop(importDialog);
-addNextFiveButton.addEventListener("click", addNextFiveFromLastFolder);
+addNextFiveButton.addEventListener("click", () => {
+  importDialog.close();
+  void addNextFiveFromLastFolder();
+});
 restoreLibraryButton.addEventListener("click", reconnectSavedPlaylist);
 
 fileInput.addEventListener("change", async (event) => {
@@ -3279,22 +3241,6 @@ showTranscriptButton.addEventListener("click", () => revealTranscriptEditor({ fo
 saveTranscriptButton.addEventListener("click", saveTranscript);
 deleteTranscriptButton.addEventListener("click", removeStoredTranscript);
 translateButton.addEventListener("click", () => startTranslation(activeTranscriptRecord, true));
-currentTranslationButton.addEventListener("click", () => {
-  if (!activeTranscriptRecord?.text) return;
-  renderCurrentTranslation();
-  openSettingsDialog(currentTranslationDialog, currentTranslationClose);
-});
-currentTranslationGenerate.addEventListener("click", () => {
-  if (!activeTranscriptRecord?.text) return;
-  if (!getTranslationAccessKey()) {
-    currentTranslationDialog.close();
-    openTranslationSettings();
-    return;
-  }
-  startTranslation(activeTranscriptRecord, true);
-  renderCurrentTranslation();
-});
-currentTranslationClose.addEventListener("click", () => currentTranslationDialog.close());
 translationSettingsButton.addEventListener("click", () => {
   if (transcriptSettingsDialog.open) transcriptSettingsDialog.close();
   openTranslationSettings();
@@ -3371,7 +3317,6 @@ transcriptDisplayClose.addEventListener("click", () => transcriptDisplayDialog.c
 closeSettingsOnBackdrop(transcriptSettingsDialog);
 closeSettingsOnBackdrop(transcriptWorkspaceDialog);
 closeSettingsOnBackdrop(transcriptDisplayDialog);
-closeSettingsOnBackdrop(currentTranslationDialog);
 transcriptDisplayModeSelect.addEventListener("change", () => {
   settings.transcriptVisible = transcriptDisplayModeSelect.value === "show";
   if (!settings.transcriptVisible) transcriptEditorForcedTrackId = null;

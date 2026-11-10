@@ -26,16 +26,16 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=54" />
-    <title>Listening Desk v54 — 文ごとにリピーティング</title>
+    <link rel="stylesheet" href="./styles.css?v=55" />
+    <title>Listening Desk v55</title>
   </head>
   <body>
     <header class="nav-edge" aria-label="アプリヘッダー">
-      <a class="wordmark" href="#app" aria-label="Listening Desk v54の先頭へ">
+      <a class="wordmark" href="#app" aria-label="Listening Desk v55の先頭へ">
         <span class="wordmark__mark" aria-hidden="true">LD</span>
         <span class="wordmark__title">
           <span class="wordmark__name">Listening Desk</span>
-          <span class="wordmark__version">v54</span>
+          <span class="wordmark__version">v55</span>
         </span>
       </a>
       <div class="nav-edge__actions">
@@ -98,7 +98,7 @@
     </dialog>
 
     <main id="app" class="app-shell">
-      <h1 class="visually-hidden" id="page-title">Listening Desk v54</h1>
+      <h1 class="visually-hidden" id="page-title">Listening Desk v55</h1>
 
       <section class="workbench reveal" style="--i: 0" aria-label="音声プレイヤー">
         <div class="player-pane">
@@ -301,7 +301,7 @@
                   </select>
                 </div>
               </div>
-              <p class="sentence-practice-status" id="practice-status" aria-live="polite">文ごとのリピートはOFFです。</p>
+              <p class="sentence-practice-status" id="practice-status" aria-live="polite" hidden>文ごとのリピートはOFFです。</p>
               <div class="word-dialog__actions">
                 <button class="control control--primary" id="practice-settings-close" type="button">閉じる</button>
               </div>
@@ -374,24 +374,13 @@
 
             <div class="transcript-content" id="transcript-content">
               <section class="sync-script" id="sync-script" aria-labelledby="sync-script-title" hidden data-view="focus">
-                <div class="sync-script__heading">
-                  <div class="sync-script__title-row">
-                    <h4 id="sync-script-title">再生中の英文</h4>
-                    <button
-                      class="control control--text sync-translation-button"
-                      id="current-translation-button"
-                      type="button"
-                      aria-haspopup="dialog"
-                      disabled
-                    >
-                      日本語訳を見る
-                    </button>
-                  </div>
+                <h4 class="visually-hidden" id="sync-script-title">再生中の英文と日本語訳</h4>
+                <div class="sync-script__scroll" tabindex="0" aria-label="再生中の英文。下へスクロールすると日本語訳を表示">
+                  <p class="current-sentence__position" id="current-sentence-position">— / —</p>
+                  <div class="sync-transcript" id="sync-transcript" aria-label="単語を選択できる再生中の英文"></div>
+                  <p class="current-sentence__translation" id="current-sentence-translation"></p>
+                  <ol class="sentence-list" id="sentence-list" aria-label="英文と和訳の一覧"></ol>
                 </div>
-                <p class="current-sentence__position" id="current-sentence-position">— / —</p>
-                <div class="sync-transcript" id="sync-transcript" aria-label="単語を選択できる再生中の英文"></div>
-                <p class="current-sentence__translation" id="current-sentence-translation"></p>
-                <ol class="sentence-list" id="sentence-list" aria-label="英文と和訳の一覧"></ol>
               </section>
             </div>
 
@@ -450,19 +439,6 @@
             </form>
           </dialog>
 
-          <dialog class="word-dialog current-translation-dialog" id="current-translation-dialog" aria-labelledby="current-translation-title">
-            <div class="word-dialog__inner">
-              <p class="word-dialog__label">現在の音声</p>
-              <h3 id="current-translation-title">日本語スクリプト</h3>
-              <p class="current-translation-output" id="current-translation-output"></p>
-              <p class="translation-status" id="current-translation-status" aria-live="polite"></p>
-              <div class="word-dialog__actions">
-                <button class="control control--primary" id="current-translation-generate" type="button">日本語訳を生成</button>
-                <button class="control control--text" id="current-translation-close" type="button">閉じる</button>
-              </div>
-            </div>
-          </dialog>
-
           <dialog class="word-dialog translation-settings-dialog" id="translation-settings-dialog" aria-labelledby="translation-settings-title">
             <form class="word-dialog__inner" id="translation-settings-form">
               <p class="word-dialog__label">OpenAI API設定</p>
@@ -512,7 +488,6 @@
             <div class="library-heading__copy">
               <h2 id="library-title">再生リスト</h2>
               <p id="library-count">0件</p>
-              <p class="library-swipe-hint">左へスワイプして削除</p>
             </div>
             <div class="library-actions">
               <button
@@ -523,14 +498,6 @@
                 hidden
               >
                 <span id="restore-library-text" aria-live="polite">音声に再接続</span>
-              </button>
-              <button
-                class="control control--quiet add-next-five"
-                id="add-next-five-button"
-                type="button"
-                aria-label="直前に選んだフォルダから続きの5音声を追加"
-              >
-                5音声追加
               </button>
               <div class="file-action" id="file-action">
                 <input
@@ -575,6 +542,14 @@
               <div class="import-options">
                 <button class="control control--primary" id="choose-files-button" type="button">複数ファイルを選ぶ</button>
                 <button class="control control--quiet" id="choose-folder-button" type="button">フォルダごと選ぶ</button>
+                <button
+                  class="control control--quiet add-next-five"
+                  id="add-next-five-button"
+                  type="button"
+                  aria-label="直前に選んだフォルダから続きの5音声を追加"
+                >
+                  続きの5音声を追加
+                </button>
               </div>
               <div class="import-guide" aria-labelledby="import-guide-title">
                 <p id="import-guide-title">1回で複数選ぶ方法</p>
@@ -649,6 +624,6 @@
 
     <div class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./app.js?v=54"></script>
+    <script type="module" src="./app.js?v=55"></script>
   </body>
 </html>
