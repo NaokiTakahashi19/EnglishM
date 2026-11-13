@@ -359,6 +359,11 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 
+.timeline__times #current-time[data-pause="true"] {
+  color: var(--color-error);
+  font-weight: 700;
+}
+
 .transport {
   position: fixed;
   inset-inline: max(var(--space-xs), env(safe-area-inset-left));

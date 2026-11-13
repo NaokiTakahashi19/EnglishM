@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const root = new URL("../", import.meta.url);
-const [html, css] = await Promise.all([
+const [html, css, app] = await Promise.all([
   readFile(new URL("index.html", root), "utf8"),
   readFile(new URL("styles.css", root), "utf8"),
+  readFile(new URL("app.js", root), "utf8"),
 ]);
 
 assert(!html.includes("左へスワイプして削除"), "swipe deletion hint should not be visible");
@@ -27,6 +28,10 @@ assert(englishIndex >= 0 && translationIndex > englishIndex, "Japanese translati
 
 assert.match(css, /\.sync-script__scroll\s*\{[^}]*overflow-y:\s*auto;/s, "bilingual surface should scroll vertically");
 assert.match(css, /\.current-sentence__translation\s*\{[^}]*border-block-start:/s, "translation should have a readable section boundary");
-assert.match(html, /Listening Desk v56/, "visible build should identify v56");
+assert.match(css, /#current-time\[data-pause="true"\][^{]*\{[^}]*color:\s*var\(--color-error\)/s, "pause elapsed time should be red");
+assert.match(app, /startPauseTimeline\("track", pauseSeconds\)/, "track pauses should show elapsed and total time");
+assert.match(app, /startPauseTimeline\("sentence", pauseSeconds\)/, "sentence pauses should show elapsed and total time");
+assert.match(app, /durationLabel\.textContent = Number\.isFinite\(pauseTimelineDuration\)[\s\S]*?: "∞";/, "manual pauses should show an infinite total");
+assert.match(html, /Listening Desk v57/, "visible build should identify v57");
 
-console.log("mobile-density tests: 9 passed");
+console.log("mobile-density tests: 13 passed");

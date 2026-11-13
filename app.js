@@ -183,6 +183,10 @@ let sentenceCountdownTimer = null;
 let sentencePauseUntil = 0;
 let sentencePauseActive = false;
 let pendingSentenceIndex = -1;
+let pauseTimelineTimer = null;
+let pauseTimelineStartedAt = 0;
+let pauseTimelineDuration = 0;
+let pauseTimelineOwner = "";
 let sentencePracticeEnabled = false;
 let selectedWord = null;
 let transcriptEditorForcedTrackId = null;
@@ -1441,6 +1445,43 @@ function syncPracticeUi() {
   }
 }
 
+function updatePauseTimeline() {
+  if (!pauseTimelineOwner || pauseTimelineStartedAt <= 0) return false;
+  const elapsedSeconds = Math.max(0, (Date.now() - pauseTimelineStartedAt) / 1000);
+  currentTimeLabel.textContent = formatTime(elapsedSeconds);
+  currentTimeLabel.dataset.pause = "true";
+  durationLabel.textContent = Number.isFinite(pauseTimelineDuration)
+    ? formatTime(pauseTimelineDuration)
+    : "∞";
+  return true;
+}
+
+function startPauseTimeline(owner, durationSeconds = Number.POSITIVE_INFINITY) {
+  window.clearInterval(pauseTimelineTimer);
+  pauseTimelineOwner = owner;
+  pauseTimelineStartedAt = Date.now();
+  pauseTimelineDuration = Number.isFinite(durationSeconds)
+    ? Math.max(0, durationSeconds)
+    : Number.POSITIVE_INFINITY;
+  updatePauseTimeline();
+  pauseTimelineTimer = window.setInterval(updatePauseTimeline, 250);
+}
+
+function stopPauseTimeline(owner = "") {
+  if (!pauseTimelineOwner) return false;
+  if (owner && pauseTimelineOwner !== owner) return;
+  window.clearInterval(pauseTimelineTimer);
+  pauseTimelineTimer = null;
+  pauseTimelineStartedAt = 0;
+  pauseTimelineDuration = 0;
+  pauseTimelineOwner = "";
+  delete currentTimeLabel.dataset.pause;
+  const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+  currentTimeLabel.textContent = formatTime(audio.currentTime);
+  durationLabel.textContent = formatTime(duration);
+  return true;
+}
+
 function startAutoNextPause(
   targetIndex,
   playedSeconds = audio.duration / Math.max(audio.playbackRate, 0.1),
@@ -1450,6 +1491,7 @@ function startAutoNextPause(
   isPracticePause = true;
   pendingPracticeTargetIndex = targetIndex;
   practicePauseUntil = Date.now() + pauseSeconds * 1000;
+  startPauseTimeline("track", pauseSeconds);
   updatePracticeCountdown();
   practiceCountdownTimer = window.setInterval(updatePracticeCountdown, 250);
   practicePauseTimer = window.setTimeout(() => {
@@ -1473,6 +1515,7 @@ function cancelPracticePause(updateUi = true) {
   practiceCountdownTimer = null;
   isPracticePause = false;
   pendingPracticeTargetIndex = -1;
+  stopPauseTimeline("track");
   if (updateUi) syncPracticeUi();
 }
 
@@ -1817,6 +1860,7 @@ function cancelSentencePause({ clearPending = true, updateUi = true } = {}) {
   sentenceCountdownTimer = null;
   sentencePauseUntil = 0;
   sentencePauseActive = false;
+  stopPauseTimeline("sentence");
   if (clearPending) pendingSentenceIndex = -1;
   if (updateUi) updateSentencePracticeStatus();
 }
@@ -1896,6 +1940,7 @@ function pauseAtSentenceBoundary(index) {
   }
 
   if (settings.practiceMode === "manual") {
+    startPauseTimeline("sentence");
     updateSentencePracticeStatus();
     return;
   }
@@ -1904,6 +1949,7 @@ function pauseAtSentenceBoundary(index) {
   const pauseSeconds = Math.max(0.5, playedSeconds * Number(settings.pauseRatio));
   sentencePauseActive = true;
   sentencePauseUntil = Date.now() + pauseSeconds * 1000;
+  startPauseTimeline("sentence", pauseSeconds);
   updateSentencePracticeStatus();
   sentenceCountdownTimer = window.setInterval(updateSentencePracticeStatus, 250);
   sentencePauseTimer = window.setTimeout(() => {
@@ -2196,6 +2242,7 @@ function completeCurrentTrack({ playedSeconds } = {}) {
   if (settings.practiceMode === "manual") {
     const repeatsSameTrack = targetIndex === currentIndex;
     activatePracticeTarget(targetIndex, false);
+    startPauseTimeline("track");
     practiceStatus.dataset.state = "paused";
     practiceStatus.textContent = repeatsSameTrack
       ? `同じ音声を先頭に戻しました。再生ボタンで${completedPlaysForCurrentTrack + 1}回目を再生します。`
@@ -2956,8 +3003,10 @@ function updateTimeline() {
   seek.value = String(Math.min(audio.currentTime, duration));
   const progress = duration > 0 ? (audio.currentTime / duration) * 100 : 0;
   seek.style.setProperty("--progress", `${progress}%`);
-  currentTimeLabel.textContent = formatTime(audio.currentTime);
-  durationLabel.textContent = formatTime(duration);
+  if (!updatePauseTimeline()) {
+    currentTimeLabel.textContent = formatTime(audio.currentTime);
+    durationLabel.textContent = formatTime(duration);
+  }
   updateMediaSessionPosition();
   updateTranscriptHighlight();
 
