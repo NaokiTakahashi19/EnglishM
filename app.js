@@ -1491,6 +1491,30 @@ function normalizeTimedWords(words) {
     .filter((word) => word.text && Number.isFinite(word.start));
 }
 
+function comparableEnglishToken(text) {
+  return String(text || "")
+    .toLocaleLowerCase("en")
+    .replace(/[’]/g, "'")
+    .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "");
+}
+
+function restoreTimedWordPunctuation(words, transcriptText = "") {
+  const normalizedWords = normalizeTimedWords(words);
+  const transcriptTokens = String(transcriptText || "").trim().split(/\s+/).filter(Boolean);
+  if (
+    normalizedWords.length === 0
+    || transcriptTokens.length !== normalizedWords.length
+    || normalizedWords.some((word, index) => (
+      comparableEnglishToken(word.text) !== comparableEnglishToken(transcriptTokens[index])
+    ))
+  ) return normalizedWords;
+
+  return normalizedWords.map((word, index) => ({
+    ...word,
+    text: transcriptTokens[index],
+  }));
+}
+
 function normalizeTimedSegments(segments) {
   if (!Array.isArray(segments)) return [];
   return segments
@@ -1514,7 +1538,7 @@ function isSentenceEnding(text) {
   return /[.!?](?:["'”’\])}]+)?$/.test(String(text || "").trim());
 }
 
-const SENTENCE_CUE_VERSION = 2;
+const SENTENCE_CUE_VERSION = 3;
 const LIKELY_SENTENCE_STARTS = new Set([
   "can", "could", "did", "do", "does", "had", "has", "have", "he", "her", "here",
   "how", "i", "is", "it", "let's", "may", "please", "she", "should", "that", "the",
@@ -1558,7 +1582,7 @@ function normalizeSentenceCues(sentences) {
 }
 
 function buildSentenceCues(words, segments, transcriptText = "", fallbackDuration = 0) {
-  const normalizedWords = normalizeTimedWords(words);
+  const normalizedWords = restoreTimedWordPunctuation(words, transcriptText);
   const normalizedSegments = normalizeTimedSegments(segments);
   const cues = [];
   let currentTokens = [];
@@ -1640,12 +1664,23 @@ function buildSentenceCues(words, segments, transcriptText = "", fallbackDuratio
 function normalizeTranscriptRecord(record) {
   if (!record?.text) return record;
   const existingSentences = normalizeSentenceCues(record.sentences);
-  const rebuiltSentences = buildSentenceCues(record.words, record.segments, record.text, audio.duration);
+  const normalizedWords = restoreTimedWordPunctuation(record.words, record.text);
+  const rebuiltSentences = buildSentenceCues(normalizedWords, record.segments, record.text, audio.duration)
+    .map((sentence, index) => ({
+      ...sentence,
+      translation: existingSentences[index]?.translation || sentence.translation,
+    }));
   const shouldUpgradeSentenceCues = Number(record.sentenceCueVersion || 0) < SENTENCE_CUE_VERSION
-    && rebuiltSentences.length > existingSentences.length;
+    && (
+      rebuiltSentences.length > existingSentences.length
+      || (
+        rebuiltSentences.length === existingSentences.length
+        && rebuiltSentences.some((sentence, index) => sentence.text !== existingSentences[index]?.text)
+      )
+    );
   return {
     ...record,
-    words: normalizeTimedWords(record.words),
+    words: normalizedWords,
     segments: normalizeTimedSegments(record.segments),
     sentences: existingSentences.length > 0 && !shouldUpgradeSentenceCues
       ? existingSentences
@@ -1670,6 +1705,17 @@ function sentenceIndexAtTime(time) {
     if (safeTime >= cues[index].start - 0.03) return index;
   }
   return 0;
+}
+
+function sentenceTerminalPunctuation(text) {
+  return String(text || "").trim().match(/([.!?…]+(?:["'”’\])}]+)?)$/u)?.[1] || "";
+}
+
+function synchronizedWordText(word, sentenceIndex, nextSentenceIndex, cues) {
+  const text = String(word?.text || "");
+  if (sentenceIndex < 0 || nextSentenceIndex === sentenceIndex) return text;
+  const punctuation = sentenceTerminalPunctuation(cues?.[sentenceIndex]?.text);
+  return punctuation && !text.endsWith(punctuation) ? `${text}${punctuation}` : text;
 }
 
 function keepActiveSentenceVisible(button) {
@@ -1916,6 +1962,7 @@ function wordCacheKey(text) {
 
 function renderSynchronizedTranscript(words) {
   const normalizedWords = normalizeTimedWords(words);
+  const cues = sentenceCues();
   syncTranscript.replaceChildren();
   syncWordButtons = [];
   activeSyncWordIndex = -1;
@@ -1927,14 +1974,19 @@ function renderSynchronizedTranscript(words) {
 
   normalizedWords.forEach((word, index) => {
     const button = document.createElement("button");
+    const sentenceIndex = sentenceIndexAtTime(word.start);
+    const nextSentenceIndex = normalizedWords[index + 1]
+      ? sentenceIndexAtTime(normalizedWords[index + 1].start)
+      : -1;
+    const displayText = synchronizedWordText(word, sentenceIndex, nextSentenceIndex, cues);
     button.className = "sync-word";
     button.type = "button";
-    button.textContent = word.text;
+    button.textContent = displayText;
     button.dataset.start = String(word.start);
     button.dataset.index = String(index);
-    button.dataset.sentenceIndex = String(sentenceIndexAtTime(word.start));
+    button.dataset.sentenceIndex = String(sentenceIndex);
     if (Number.isFinite(word.end)) button.dataset.end = String(word.end);
-    button.dataset.baseAriaLabel = `${word.text}、${formatTime(word.start)}から`;
+    button.dataset.baseAriaLabel = `${displayText}、${formatTime(word.start)}から`;
     button.setAttribute("aria-label", button.dataset.baseAriaLabel);
     button.addEventListener("click", () => handleSynchronizedWord(word, index));
     syncWordButtons.push(button);
@@ -2220,9 +2272,7 @@ async function loadTranscript(track) {
     if (currentTrack()?.id !== track.id) return;
     if (record?.text) {
       activeTranscriptRecord = normalizeTranscriptRecord(record);
-      const sentenceCuesUpgraded = Number(record.sentenceCueVersion || 0) < SENTENCE_CUE_VERSION
-        && normalizeSentenceCues(activeTranscriptRecord.sentences).length
-          > normalizeSentenceCues(record.sentences).length;
+      const sentenceCuesUpgraded = Number(record.sentenceCueVersion || 0) < SENTENCE_CUE_VERSION;
       if (sentenceCuesUpgraded) {
         try {
           await putStoredTranscript(activeTranscriptRecord);
@@ -2265,6 +2315,16 @@ async function loadTranscript(track) {
   }
 }
 
+const TRANSCRIPTION_MAX_ATTEMPTS = 3;
+const TRANSCRIPTION_RETRY_DELAYS_MS = [1500, 4000];
+
+function isRetryableTranscriptionError(error, online = navigator.onLine) {
+  if (!online || error?.code === "storage_failed") return false;
+  if (error?.code === "request_timeout") return true;
+  if ([408, 429, 502, 504].includes(Number(error?.status))) return true;
+  return error?.status == null;
+}
+
 async function startTranscription() {
   const track = currentTrack();
   if (!track || transcribingTrackId) return;
@@ -2299,38 +2359,60 @@ async function startTranscription() {
   transcriptStatus.dataset.state = "loading";
   transcriptStatus.textContent = "音声を送信し、OpenAI APIで英文と単語時刻を生成しています。完了までこの画面でお待ちください。";
 
-  const requestController = new AbortController();
-  const requestTimeout = window.setTimeout(() => requestController.abort(), 90_000);
-
   try {
     const uploadBody = track.file instanceof Blob
       ? track.file
-      : await fetch(track.url, { signal: requestController.signal }).then((response) => {
+      : await fetch(track.url).then((response) => {
         if (!response.ok) throw new Error("Native audio cache is unavailable");
         return response.blob();
       });
-    const response = await fetch(TRANSCRIPTION_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        "X-Translation-Key": accessKey,
-        "X-Audio-Filename": encodeURIComponent(track.file.name),
-        "X-Audio-Type": track.file.type || "application/octet-stream",
-      },
-      body: uploadBody,
-      signal: requestController.signal,
-    });
     let payload = {};
-    try {
-      payload = await response.json();
-    } catch {
-      payload = {};
-    }
-    if (!response.ok) {
-      const error = new Error(payload.error || "Transcription request failed");
-      error.status = response.status;
-      error.code = payload.code || "";
-      throw error;
+    for (let attempt = 1; attempt <= TRANSCRIPTION_MAX_ATTEMPTS; attempt += 1) {
+      const requestController = new AbortController();
+      const requestTimeout = window.setTimeout(() => requestController.abort(), 90_000);
+      try {
+        const response = await fetch(TRANSCRIPTION_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "X-Translation-Key": accessKey,
+            "X-Audio-Filename": encodeURIComponent(track.file.name),
+            "X-Audio-Type": track.file.type || "application/octet-stream",
+          },
+          body: uploadBody,
+          signal: requestController.signal,
+        });
+        try {
+          payload = await response.json();
+        } catch {
+          payload = {};
+        }
+        if (!response.ok) {
+          const responseError = new Error(payload.error || "Transcription request failed");
+          responseError.status = response.status;
+          responseError.code = payload.code || "";
+          throw responseError;
+        }
+        break;
+      } catch (error) {
+        const reportedError = error?.name === "AbortError"
+          ? Object.assign(new Error("Transcription request timed out"), { code: "request_timeout" })
+          : error;
+        const willRetry = attempt < TRANSCRIPTION_MAX_ATTEMPTS
+          && isRetryableTranscriptionError(reportedError);
+        if (!willRetry) {
+          if (attempt > 1) reportedError.retriesExhausted = true;
+          throw reportedError;
+        }
+        const nextAttempt = attempt + 1;
+        transcriptStatus.textContent = `通信が安定しないため自動で再試行します（${nextAttempt}/${TRANSCRIPTION_MAX_ATTEMPTS}回目）。`;
+        await new Promise((resolve) => window.setTimeout(
+          resolve,
+          TRANSCRIPTION_RETRY_DELAYS_MS[attempt - 1] || 4000,
+        ));
+      } finally {
+        window.clearTimeout(requestTimeout);
+      }
     }
     const text = String(payload.text || "").trim();
     if (!text) {
@@ -2338,7 +2420,7 @@ async function startTranscription() {
       return;
     }
 
-    const words = normalizeTimedWords(payload.words);
+    const words = restoreTimedWordPunctuation(payload.words, text);
     const segments = normalizeTimedSegments(payload.segments);
     const record = {
       id: track.id,
@@ -2378,12 +2460,8 @@ async function startTranscription() {
     }
   } catch (error) {
     console.error("OpenAI transcription failed:", error);
-    const reportedError = error?.name === "AbortError"
-      ? Object.assign(new Error("Transcription request timed out"), { code: "request_timeout" })
-      : error;
-    finishTranscriptionWithError(transcriptionErrorMessage(reportedError));
+    finishTranscriptionWithError(transcriptionErrorMessage(error));
   } finally {
-    window.clearTimeout(requestTimeout);
     if (transcribingTrackId === track.id) finishTranscription();
   }
 }
@@ -2415,6 +2493,9 @@ function transcriptionErrorMessage(error) {
   }
   if (!navigator.onLine) {
     return "英文を生成できませんでした。オフラインです。通信接続後にもう一度お試しください。";
+  }
+  if (error?.retriesExhausted) {
+    return "英文を生成できませんでした。通信を3回試しましたが完了しませんでした。しばらく待ってから再度お試しください。";
   }
   return "英文を生成できませんでした。生成サーバーに接続できません。通信状態を確認して再度お試しください。";
 }

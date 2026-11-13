@@ -12,7 +12,7 @@ python3 -m http.server 4173
 
 ブラウザで `http://localhost:4173` を開いてください。
 
-## Androidアプリ（v55）
+## Androidアプリ（v56）
 
 Android版は既存のPWA画面をCapacitorで端末アプリ化し、AndroidのStorage Access Frameworkで選択したファイル／フォルダの読み取り権限を保持します。初回だけ音声またはフォルダを選ぶと、再生リストと現在の音声をAndroid側へ保存し、2回目以降は起動時に自動復元します。「音声に再接続」を毎回押す必要はありません。
 
@@ -28,7 +28,7 @@ Android版には次も含まれます。
 
 ### デバッグAPKの作成
 
-Capacitor 8のAndroidプロジェクトは `android/` にあります。GitHubの「Actions」→「Android debug APK」→「Run workflow」でビルドすると、成果物 `listening-desk-v55-debug` から `app-debug.apk` を取得できます。ワークフローはNode.js 24、Java 21、Android API 36でビルドします。
+Capacitor 8のAndroidプロジェクトは `android/` にあります。GitHubの「Actions」→「Android debug APK」→「Run workflow」でビルドすると、成果物 `listening-desk-v56-debug` から `app-debug.apk` を取得できます。ワークフローはNode.js 24、Java 21、Android API 36でビルドします。
 
 ローカルで作成する場合は、Capacitor 8に対応したAndroid Studio 2025.2.1以降とAndroid SDKを用意し、次を実行します。
 
@@ -43,6 +43,7 @@ APKは `android/app/build/outputs/apk/debug/app-debug.apk` に生成されます
 
 - 20秒〜2分程度の長い音声を、認識した英文1文ごとの開始・終了時刻に分割
 - 文末記号がない認識結果も、無音・発話時間・文頭表現から読みやすい文単位へ自動補正
+- 全文にあるピリオドなどの文末記号を単語時刻データへ補い、再生中の英文にも省略せず表示
 - 「リピーティング設定」で切り替えられる、文末ごとの停止／連続再生
 - 直前の文の実再生時間を基準に0.7〜1.5倍待って自動再開、または∞（再生ボタンまで停止）
 - 再生中の英文を単語ハイライト付きで1か所だけに表示し、同じ文の重複表示を抑えた省スペース表示。英文欄を下へスクロールすると現在文の日本語訳を確認可能
@@ -62,6 +63,7 @@ APKは `android/app/build/outputs/apk/debug/app-debug.apk` に生成されます
 - ファイルの実再生時間の0.7〜1.5倍待ち、同じ音声または次の音声を自動再生する練習モード
 - 再生リストを順番に進む、各音声を指定回数再生してから進む、同じ音声を無限に繰り返す3つの再生方法
 - OpenAI Whisper APIによる英語スクリプト、文・単語時刻の生成
+- 英文生成の通信失敗・タイムアウト・一時的エラー時に、間隔を空けて最大3回まで自動試行
 - 生成・修正したスクリプトのIndexedDB保存と再表示
 - 再生位置に合わせた単語ハイライトと、単語選択によるシーク
 - 停止中に単語を選んだ場合のOpenAI APIによる日本語訳ポップアップ

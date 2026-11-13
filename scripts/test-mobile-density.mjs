@@ -27,6 +27,6 @@ assert(englishIndex >= 0 && translationIndex > englishIndex, "Japanese translati
 
 assert.match(css, /\.sync-script__scroll\s*\{[^}]*overflow-y:\s*auto;/s, "bilingual surface should scroll vertically");
 assert.match(css, /\.current-sentence__translation\s*\{[^}]*border-block-start:/s, "translation should have a readable section boundary");
-assert.match(html, /Listening Desk v55/, "visible build should identify v55");
+assert.match(html, /Listening Desk v56/, "visible build should identify v56");
 
 console.log("mobile-density tests: 9 passed");
