@@ -1,12 +1,16 @@
 /* Hallmark · macrostructure: Workbench · genre: editorial · theme: selectable Warm / Blue / Sage / Night · tone: utilitarian
  * audience: one mobile-first individual English learner · use: repeat one long recording sentence by sentence
- * enrichment: none · nav: N1a wordmark + 2 actions · footer: Ft2 inline utility strip · density: compact player workbench
- * N1a knobs: position=left/right split · links=icon+text · sticky=no · Ft2 knobs: order=links/status · density=spaced
+ * enrichment: none · nav: N9 settings mark + primary add action · footer: Ft2 inline utility strip · density: compact player workbench
+ * N9 knobs: settings=LD mark · primary=audio import · sticky=no · Ft2 knobs: order=links/status · density=spaced
  * contrast: pass (40–41) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · mobile: pass (34, 49–57)
  */
 /* Hallmark · component: theme switcher · genre: editorial · theme: selectable learning palettes
  * states: default · hover · focus · active · disabled · loading · error · success
  * contrast: pass (40–41, 49)
+ */
+/* Hallmark · component: header actions · genre: editorial · theme: selectable learning palettes
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: pass (40–41, 49) · mobile: pass (34, 49–57)
  */
 /* Hallmark · component: app information dialog · genre: editorial · theme: selectable learning palettes
  * states: default · hover · focus · active · disabled · loading · error · success
@@ -23,7 +27,7 @@
  * contrast: pass (40–41) · mobile: pass (34, 49–56)
  */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · slop: pass (1–58) */
-@import url("./tokens.css?v=55");
+@import url("./tokens.css?v=58");
 
 *,
 *::before,
@@ -167,9 +171,14 @@ h3 {
 .wordmark__mark {
   display: grid;
   place-items: center;
-  width: 2.15rem;
+  width: var(--size-touch);
+  min-height: var(--size-touch);
+  padding: 0;
   aspect-ratio: 1;
   border: var(--rule-thin) solid var(--color-ink);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  cursor: pointer;
   font-family: var(--font-outlier);
   font-size: var(--text-xs);
   font-weight: 500;
@@ -177,7 +186,7 @@ h3 {
 }
 
 .wordmark__title {
-  display: inline-flex;
+  display: none;
   align-items: baseline;
   gap: var(--space-xs);
 }
@@ -190,18 +199,27 @@ h3 {
   letter-spacing: 0;
 }
 
-.nav-edge:has(.install-button:not([hidden])) .wordmark__title {
-  display: none;
+.wordmark__mark:active {
+  transform: translateY(1px);
 }
 
-.theme-settings-button {
-  flex: 0 0 auto;
-  width: var(--size-touch);
-  padding: 0;
+.wordmark__mark:disabled,
+.wordmark__mark[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
-.theme-settings-button > span {
-  display: none;
+.wordmark__mark[data-state="loading"] {
+  cursor: progress;
+  color: var(--color-muted);
+}
+
+.wordmark__mark[data-state="error"] {
+  border-color: var(--color-error);
+}
+
+.wordmark__mark[data-state="success"] {
+  border-color: var(--color-success);
 }
 
 .app-shell {
@@ -216,6 +234,10 @@ h3 {
 
 .file-picker {
   padding-inline: var(--space-sm);
+}
+
+.nav-edge .file-picker {
+  min-height: var(--size-touch);
 }
 
 .control,
@@ -477,6 +499,14 @@ h3 {
   margin: 0;
   padding: 0;
   border: 0;
+}
+
+.theme-options__legend {
+  margin-block-end: var(--space-xs);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .theme-option {
@@ -1702,6 +1732,10 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .wordmark__mark:not(:disabled):hover {
+    background: var(--color-paper-3);
+  }
+
   .theme-option:not(:has(input:disabled)):hover {
     background: var(--color-paper-3);
   }
@@ -1770,17 +1804,8 @@ body:has(#transcript-content:not([hidden]) #sync-script:not([hidden])) .player-p
 }
 
 @media (min-width: 40rem) {
-  .nav-edge:has(.install-button:not([hidden])) .wordmark__title {
+  .wordmark__title {
     display: inline-flex;
-  }
-
-  .theme-settings-button > span {
-    display: inline;
-  }
-
-  .theme-settings-button {
-    width: auto;
-    padding-inline: var(--space-md);
   }
 
   .import-options {

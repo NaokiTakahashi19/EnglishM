@@ -268,7 +268,7 @@ function applyTheme(theme, { persist = true } = {}) {
     input.checked = input.value === nextTheme;
   });
   themeSettingsStatus.textContent = `${THEME_LABELS[nextTheme]}を使用中`;
-  themeSettingsButton.setAttribute("aria-label", `${THEME_LABELS[nextTheme]}を使用中。配色を変更`);
+  themeSettingsButton.setAttribute("aria-label", `アプリ設定を開く。配色は${THEME_LABELS[nextTheme]}`);
 
   const surfaceColor = getComputedStyle(document.documentElement).getPropertyValue("--color-paper").trim();
   if (surfaceColor) themeColorMeta.setAttribute("content", surfaceColor);

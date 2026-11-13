@@ -26,45 +26,68 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=57" />
-    <title>Listening Desk v57</title>
+    <link rel="stylesheet" href="./styles.css?v=58" />
+    <title>Listening Desk v58</title>
   </head>
   <body>
     <header class="nav-edge" aria-label="アプリヘッダー">
-      <a class="wordmark" href="#app" aria-label="Listening Desk v57の先頭へ">
-        <span class="wordmark__mark" aria-hidden="true">LD</span>
-        <span class="wordmark__title">
-          <span class="wordmark__name">Listening Desk</span>
-          <span class="wordmark__version">v57</span>
-        </span>
-      </a>
-      <div class="nav-edge__actions">
+      <div class="wordmark">
         <button
-          class="control control--quiet theme-settings-button"
+          class="wordmark__mark"
           id="theme-settings-button"
           type="button"
-          aria-label="配色を変更"
+          aria-label="アプリ設定を開く"
           aria-haspopup="dialog"
-        >
-          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="8" />
-            <path d="M12 4a8 8 0 0 0 0 16V4Z" />
-          </svg>
-          <span>配色</span>
-        </button>
-        <button class="control install-button" id="install-button" type="button" hidden>
-          ホームに追加
-        </button>
+        >LD</button>
+        <span class="wordmark__title">
+          <span class="wordmark__name">Listening Desk</span>
+          <span class="wordmark__version">v58</span>
+        </span>
+      </div>
+      <div class="nav-edge__actions">
+        <div class="file-action" id="file-action">
+          <input
+            id="file-input"
+            type="file"
+            accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac"
+            multiple
+            aria-hidden="true"
+            tabindex="-1"
+            hidden
+          />
+          <input
+            id="folder-input"
+            type="file"
+            accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac"
+            webkitdirectory
+            directory
+            multiple
+            aria-hidden="true"
+            tabindex="-1"
+            hidden
+          />
+          <button
+            class="control control--primary file-picker"
+            id="file-picker-button"
+            type="button"
+            aria-haspopup="dialog"
+          >
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v5h14v-5" />
+            </svg>
+            <span id="file-picker-text">音声を追加</span>
+          </button>
+        </div>
       </div>
     </header>
 
     <dialog class="word-dialog settings-dialog theme-settings-dialog" id="theme-settings-dialog" aria-labelledby="theme-settings-title" tabindex="-1">
       <div class="word-dialog__inner">
-        <p class="word-dialog__label">表示設定</p>
-        <h3 id="theme-settings-title">配色</h3>
+        <p class="word-dialog__label">アプリ設定</p>
+        <h3 id="theme-settings-title">表示とアプリ</h3>
         <p class="settings-dialog__note">画面全体の配色を選びます。選択内容はこのブラウザに保存されます。</p>
         <fieldset class="theme-options">
-          <legend class="visually-hidden">配色を選択</legend>
+          <legend class="theme-options__legend">配色</legend>
           <label class="theme-option">
             <input type="radio" name="theme" value="warm" />
             <span class="theme-option__number">1</span>
@@ -92,13 +115,16 @@
         </fieldset>
         <p class="theme-settings-status" id="theme-settings-status" aria-live="polite"></p>
         <div class="word-dialog__actions">
+          <button class="control control--quiet install-button" id="install-button" type="button" hidden>
+            ホームに追加
+          </button>
           <button class="control control--primary" id="theme-settings-close" type="button">閉じる</button>
         </div>
       </div>
     </dialog>
 
     <main id="app" class="app-shell">
-      <h1 class="visually-hidden" id="page-title">Listening Desk v57</h1>
+      <h1 class="visually-hidden" id="page-title">Listening Desk v58</h1>
 
       <section class="workbench reveal" style="--i: 0" aria-label="音声プレイヤー">
         <div class="player-pane">
@@ -499,39 +525,6 @@
               >
                 <span id="restore-library-text" aria-live="polite">音声に再接続</span>
               </button>
-              <div class="file-action" id="file-action">
-                <input
-                  id="file-input"
-                  type="file"
-                  accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac"
-                  multiple
-                  aria-hidden="true"
-                  tabindex="-1"
-                  hidden
-                />
-                <input
-                  id="folder-input"
-                  type="file"
-                  accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.opus,.flac"
-                  webkitdirectory
-                  directory
-                  multiple
-                  aria-hidden="true"
-                  tabindex="-1"
-                  hidden
-                />
-                <button
-                  class="control control--primary file-picker"
-                  id="file-picker-button"
-                  type="button"
-                  aria-haspopup="dialog"
-                >
-                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v5h14v-5" />
-                  </svg>
-                  <span id="file-picker-text">音声を追加</span>
-                </button>
-              </div>
             </div>
           </div>
           <dialog class="word-dialog settings-dialog" id="import-dialog" aria-labelledby="import-dialog-title" tabindex="-1">
@@ -624,6 +617,6 @@
 
     <div class="status-message" id="status-message" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script type="module" src="./app.js?v=57"></script>
+    <script type="module" src="./app.js?v=58"></script>
   </body>
 </html>

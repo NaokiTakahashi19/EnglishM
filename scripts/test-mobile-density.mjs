@@ -12,6 +12,18 @@ assert(!html.includes("左へスワイプして削除"), "swipe deletion hint sh
 assert(!html.includes("current-translation-button"), "translation modal trigger should be removed");
 assert.match(html, /id="practice-status"[^>]*hidden/, "practice countdown should stay hidden");
 
+const headerStart = html.indexOf('<header class="nav-edge"');
+const headerEnd = html.indexOf("</header>", headerStart);
+const headerMarkup = html.slice(headerStart, headerEnd);
+assert.match(headerMarkup, /class="wordmark__mark"[\s\S]*id="theme-settings-button"/, "LD should open app settings");
+assert(headerMarkup.includes('id="file-picker-button"'), "audio import should live in the top-right header");
+assert(!headerMarkup.includes("配色</span>"), "the separate top-right theme action should be removed");
+
+const libraryStart = html.indexOf('<aside class="library-pane"');
+const libraryEnd = html.indexOf("</aside>", libraryStart);
+const libraryMarkup = html.slice(libraryStart, libraryEnd);
+assert(!libraryMarkup.includes('id="file-picker-button"'), "audio import should not be duplicated in the playlist heading");
+
 const importStart = html.indexOf('id="import-dialog"');
 const importEnd = html.indexOf("</dialog>", importStart);
 const importMarkup = html.slice(importStart, importEnd);
@@ -32,6 +44,6 @@ assert.match(css, /#current-time\[data-pause="true"\][^{]*\{[^}]*color:\s*var\(-
 assert.match(app, /startPauseTimeline\("track", pauseSeconds\)/, "track pauses should show elapsed and total time");
 assert.match(app, /startPauseTimeline\("sentence", pauseSeconds\)/, "sentence pauses should show elapsed and total time");
 assert.match(app, /durationLabel\.textContent = Number\.isFinite\(pauseTimelineDuration\)[\s\S]*?: "∞";/, "manual pauses should show an infinite total");
-assert.match(html, /Listening Desk v57/, "visible build should identify v57");
+assert.match(html, /Listening Desk v58/, "visible build should identify v58");
 
-console.log("mobile-density tests: 13 passed");
+console.log("mobile-density tests: 17 passed");

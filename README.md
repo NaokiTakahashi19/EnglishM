@@ -12,7 +12,7 @@ python3 -m http.server 4173
 
 ブラウザで `http://localhost:4173` を開いてください。
 
-## Androidアプリ（v57）
+## Androidアプリ（v58）
 
 Android版は既存のPWA画面をCapacitorで端末アプリ化し、AndroidのStorage Access Frameworkで選択したファイル／フォルダの読み取り権限を保持します。初回だけ音声またはフォルダを選ぶと、再生リストと現在の音声をAndroid側へ保存し、2回目以降は起動時に自動復元します。「音声に再接続」を毎回押す必要はありません。
 
@@ -28,7 +28,7 @@ Android版には次も含まれます。
 
 ### デバッグAPKの作成
 
-Capacitor 8のAndroidプロジェクトは `android/` にあります。GitHubの「Actions」→「Android debug APK」→「Run workflow」でビルドすると、成果物 `listening-desk-v57-debug` から `app-debug.apk` を取得できます。ワークフローはNode.js 24、Java 21、Android API 36でビルドします。
+Capacitor 8のAndroidプロジェクトは `android/` にあります。GitHubの「Actions」→「Android debug APK」→「Run workflow」でビルドすると、成果物 `listening-desk-v58-debug` から `app-debug.apk` を取得できます。ワークフローはNode.js 24、Java 21、Android API 36でビルドします。
 
 ローカルで作成する場合は、Capacitor 8に対応したAndroid Studio 2025.2.1以降とAndroid SDKを用意し、次を実行します。
 
@@ -51,6 +51,7 @@ APKは `android/app/build/outputs/apk/debug/app-debug.apk` に生成されます
 - 「現在の1文」と、再生中の文を中央へ追従する「スクロール全文」の2表示（リピーティング設定から変更）
 - 英文を選ぶと、その文の先頭から再生
 - 複数ファイル選択・フォルダ選択に対応した再生リスト
+- 左上の「LD」から配色・ホーム追加を設定し、右上の「音声を追加」から再生リストへすぐ追加
 - 対応ブラウザで、音声をコピーせずファイル参照と再生リストを保存し、次回起動時に自動復元
 - 保存した参照の権限が切れた場合にだけ表示される「音声に再接続」操作
 - 「音声を追加」画面から、最後に選んだフォルダ内の最大ファイル名に続く音声を5件ずつ追加する操作
